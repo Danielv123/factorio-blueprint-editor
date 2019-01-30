@@ -110,6 +110,7 @@ Promise.all(
     }
 
     if (!bpSource) {
+        // G.bp is the blueprint we are currently editing. Since we don't have any starting point we create a blank one.
         G.bp = new Blueprint()
         G.BPC.initBP()
         finishSetup()

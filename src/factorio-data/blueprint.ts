@@ -81,6 +81,31 @@ export class Blueprint {
             annotation: '',
             rawEntities: this.rawEntities
         }]
+		
+		socket.on("createEntity", data => {
+			const ec = new EntityContainer(this.createEntity(data.entity.name, data.entity.position, data.entity.direction));
+			G.BPC.entities.addChild(ec)
+            ec.redrawSurroundingEntities()
+		})
+		socket.on("deleteEntity", data => {
+			// ??? some more info in entityPaint.ts
+		})
+		
+		// get starting area
+		setTimeout(()=>{
+		for(let xc = 0; xc < 16; xc++){
+			for(let yc = 0; yc < 16; yc++){
+				console.log(`Fetching chunk ${JSON.stringify({x:xc,y:yc})}`)
+				socket.emit("getChunk", {x:xc,y:yc}, chunkData => {
+					chunkData.forEach(entity => {
+						console.log(`Drawing entity ${JSON.stringify(entity)}`)
+						const ec = new EntityContainer(this.createEntity(entity.name, {x:entity.x, y:entity.y}, Number(entity.direction)));
+						G.BPC.entities.addChild(ec)
+						ec.redrawSurroundingEntities()
+					})
+				})
+			}
+		}},4000)
 
         return this
     }
@@ -180,7 +205,8 @@ export class Blueprint {
 
     createEntity(name: string, position: IPoint, direction: number, directionType?: string) {
         if (!this.entityPositionGrid.checkNoOverlap(name, direction, position)) return false
-        const entity_number = this.next_entity_number++
+        // console.log(position)
+        const entity_number = posToId(position)
         const data = {
             entity_number,
             name,
@@ -543,4 +569,7 @@ export class Blueprint {
             }
         }
     }
+}
+function posToId(pos: IPoint): number {
+    return Number("1" + (Math.floor(pos.x) + "").padStart(7, "0") + (Math.floor(pos.y) + "").padStart(7, "0"));
 }

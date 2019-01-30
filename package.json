@@ -20,6 +20,7 @@
   ],
   "dependencies": {
     "@pixi/filter-adjustment": "^2.5.0",
+    "@types/socket.io": "^2.1.2",
     "ajv": "^6.5.4",
     "dat.gui": "^0.7.5",
     "delaunator": "^3.0.2",
