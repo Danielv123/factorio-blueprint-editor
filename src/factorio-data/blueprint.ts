@@ -83,7 +83,7 @@ export class Blueprint {
         }]
 		
 		socket.on("createEntity", data => {
-			const ec = new EntityContainer(this.createEntity(data.entity.name, data.entity.position, data.entity.direction));
+			const ec = new EntityContainer(this.createEntity(data.entity.name, data.entity.position, data.entity.direction, undefined, true));
 			G.BPC.entities.addChild(ec)
             ec.redrawSurroundingEntities()
 		})
@@ -203,7 +203,7 @@ export class Blueprint {
         }
     }
 
-    createEntity(name: string, position: IPoint, direction: number, directionType?: string) {
+    createEntity(name: string, position: IPoint, direction: number, directionType?: string, fakingIt?: boolean) {
         if (!this.entityPositionGrid.checkNoOverlap(name, direction, position)) return false
         // console.log(position)
         const entity_number = posToId(position)
@@ -215,6 +215,15 @@ export class Blueprint {
             type: directionType
         }
         if (!directionType) delete data.type
+		
+		// remoteMap sync changes to factorio server via master
+		if(fakingIt !== true){
+			socket.emit("createEntity", {entity:{
+				name: name.replace(/[_]/g, "-"), // replace _ with -
+				position,
+				direction
+			}})
+		}
         this.operation(entity_number, 'Added new entity',
             entities => entities.set(entity_number, Immutable.fromJS(data)),
             'add'
@@ -231,6 +240,12 @@ export class Blueprint {
         if (this.entity(entity_number).hasConnections) {
             entitiesToModify = this.connections.removeConnectionData(entity_number)
         }
+		// remoteMap sync changes to factorio server via master
+		socket.emit("deleteEntity", {
+			entity: {
+				position: idToPos(entity_number)
+			}
+		})
         this.operation(entity_number, 'Deleted entity',
             entities => entities.withMutations(map => {
 
@@ -572,4 +587,10 @@ export class Blueprint {
 }
 function posToId(pos: IPoint): number {
     return Number("1" + (Math.floor(pos.x) + "").padStart(7, "0") + (Math.floor(pos.y) + "").padStart(7, "0"));
+}
+function idToPos(ID: number): IPoint {
+	let a = String(ID).substr(1)
+	let y = Number(a.substr(7))
+	let x = Number(a.slice(0,-7))
+	return {x,y}
 }

@@ -1,0 +1,126 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{08f3e7e3-26f7-4c4d-8830-9a5759787fdc}</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <ProjectView>ShowAllFiles</ProjectView>
+    <StartupFile />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{3AF33F2E-1136-4D97-BBB7-1795711AC8B8};{349c5851-65df-11da-9384-00065b846f21};{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}</ProjectTypeGuids>
+    <TypeScriptSourceMap>true</TypeScriptSourceMap>
+    <TypeScriptModuleKind>CommonJS</TypeScriptModuleKind>
+    <EnableTypeScript>true</EnableTypeScript>
+    <TypeScriptToolsVersion>3.1</TypeScriptToolsVersion>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">14.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+    <LastActiveSolutionConfig>Debug|Any CPU</LastActiveSolutionConfig>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <ItemGroup>
+    <Content Include="package-lock.json" />
+    <Content Include="package.json" />
+    <Content Include="tsconfig.json" />
+    <Content Include="tslint.json" />
+    <Content Include="README.md" />
+    <Content Include="dist\index.html" />
+    <Content Include="dist\app.c61986b1.css" />
+    <Content Include="dist\favicon.2e70f008.png" />
+    <Content Include="dist\HREntitySpritesheet.51bc1b06.png" />
+    <Content Include="dist\iconSpritesheet.b0f55b36.png" />
+    <Content Include="dist\LREntitySpritesheet.2a45eb21.png" />
+    <Content Include="dist\tileSpritesheet.b32e8bf3.png" />
+    <Content Include="dist\utilitySpritesheet.6cc4854f.png" />
+    <Content Include="dist\logo.86ce68ea.svg" />
+    <Content Include="src\index.html" />
+    <Content Include="src\favicon.png" />
+    <Content Include="src\preview.png" />
+    <Content Include="src\logo.svg" />
+    <Content Include="src\blueprintSchema.json" />
+    <Content Include="src\style.styl" />
+    <TypeScriptCompile Include="src\app.ts" />
+    <TypeScriptCompile Include="src\entitySprite.ts" />
+    <TypeScriptCompile Include="src\globals.ts" />
+    <TypeScriptCompile Include="src\index.d.ts" />
+    <TypeScriptCompile Include="src\util.ts" />
+    <TypeScriptCompile Include="src\zoomPan.ts" />
+    <TypeScriptCompile Include="src\containers\blueprint.ts" />
+    <TypeScriptCompile Include="src\containers\editEntity.ts" />
+    <TypeScriptCompile Include="src\containers\entity.ts" />
+    <TypeScriptCompile Include="src\containers\entityPaint.ts" />
+    <TypeScriptCompile Include="src\containers\info.ts" />
+    <TypeScriptCompile Include="src\containers\inventory.ts" />
+    <TypeScriptCompile Include="src\containers\overlay.ts" />
+    <TypeScriptCompile Include="src\containers\quickbar.ts" />
+    <TypeScriptCompile Include="src\containers\tile.ts" />
+    <TypeScriptCompile Include="src\containers\tilePaint.ts" />
+    <TypeScriptCompile Include="src\containers\toolbar.ts" />
+    <TypeScriptCompile Include="src\containers\underlay.ts" />
+    <TypeScriptCompile Include="src\containers\wires.ts" />
+    <TypeScriptCompile Include="src\controls\button.ts" />
+    <TypeScriptCompile Include="src\controls\dialog.ts" />
+    <TypeScriptCompile Include="src\controls\editor.ts" />
+    <TypeScriptCompile Include="src\controls\functions.ts" />
+    <TypeScriptCompile Include="src\controls\panel.ts" />
+    <TypeScriptCompile Include="src\controls\slot.ts" />
+    <TypeScriptCompile Include="src\factorio-data\blueprint.ts" />
+    <TypeScriptCompile Include="src\factorio-data\book.ts" />
+    <TypeScriptCompile Include="src\factorio-data\BPString.ts" />
+    <TypeScriptCompile Include="src\factorio-data\connectionsManager.ts" />
+    <TypeScriptCompile Include="src\factorio-data\entity.ts" />
+    <TypeScriptCompile Include="src\factorio-data\factorioData.ts" />
+    <TypeScriptCompile Include="src\factorio-data\positionGrid.ts" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="dist" />
+    <Folder Include="src" />
+    <Folder Include="src\containers" />
+    <Folder Include="src\controls" />
+    <Folder Include="src\factorio-data" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <!--Do not delete the following Import Project.  While this appears to do nothing it is a marker for setting TypeScript properties before our import that depends on them.-->
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\TypeScript\Microsoft.TypeScript.targets" Condition="False" />
+  <Import Project="$(VSToolsPath)\Node.js Tools\Microsoft.NodejsTools.targets" />
+  <ProjectExtensions>
+    <VisualStudio>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
+        <WebProjectProperties>
+          <UseIIS>False</UseIIS>
+          <AutoAssignPort>True</AutoAssignPort>
+          <DevelopmentServerPort>0</DevelopmentServerPort>
+          <DevelopmentServerVPath>/</DevelopmentServerVPath>
+          <IISUrl>http://localhost:48022/</IISUrl>
+          <NTLMAuthentication>False</NTLMAuthentication>
+          <UseCustomServer>True</UseCustomServer>
+          <CustomServerUrl>http://localhost:1337</CustomServerUrl>
+          <SaveServerSettingsInUserFile>False</SaveServerSettingsInUserFile>
+        </WebProjectProperties>
+      </FlavorProperties>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}" User="">
+        <WebProjectProperties>
+          <StartPageUrl>
+          </StartPageUrl>
+          <StartAction>CurrentPage</StartAction>
+          <AspNetDebugging>True</AspNetDebugging>
+          <SilverlightDebugging>False</SilverlightDebugging>
+          <NativeDebugging>False</NativeDebugging>
+          <SQLDebugging>False</SQLDebugging>
+          <ExternalProgram>
+          </ExternalProgram>
+          <StartExternalURL>
+          </StartExternalURL>
+          <StartCmdLineArguments>
+          </StartCmdLineArguments>
+          <StartWorkingDirectory>
+          </StartWorkingDirectory>
+          <EnableENC>False</EnableENC>
+          <AlwaysStartWebServerOnDebug>False</AlwaysStartWebServerOnDebug>
+        </WebProjectProperties>
+      </FlavorProperties>
+    </VisualStudio>
+  </ProjectExtensions>
+</Project>
