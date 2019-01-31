@@ -82,19 +82,22 @@ export class Blueprint {
             rawEntities: this.rawEntities
         }]
 		
-		socket.on("createEntity", data => {
-			const ec = new EntityContainer(this.createEntity(data.entity.name, data.entity.position, data.entity.direction, undefined, true));
-			G.BPC.entities.addChild(ec)
-            ec.redrawSurroundingEntities()
-		})
-		socket.on("deleteEntity", data => {
-			// ??? some more info in entityPaint.ts
+		socket.on("updateEntity", data => {
+			data.entities.forEach(entity => {
+				if(entity.name == "deleted"){
+					// DeleteEntity - ??? some more info in entityPaint.ts
+				} else {
+					const ec = new EntityContainer(this.createEntity(entity.name, {x: entity.x, y: entity.y}, entity.direction, undefined, true))
+					G.BPC.entities.addChild(ec)
+					ec.redrawSurroundingEntities()
+				}
+			})
 		})
 		
 		// get starting area
 		setTimeout(()=>{
-		for(let xc = 0; xc < 16; xc++){
-			for(let yc = 0; yc < 16; yc++){
+		for(let xc = 0; xc < 10; xc++){
+			for(let yc = 0; yc < 10; yc++){
 				console.log(`Fetching chunk ${JSON.stringify({x:xc,y:yc})}`)
 				socket.emit("getChunk", {x:xc,y:yc}, chunkData => {
 					chunkData.forEach(entity => {
