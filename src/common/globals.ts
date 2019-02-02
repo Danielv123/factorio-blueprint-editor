@@ -81,8 +81,8 @@ const positionBPContainer = {
 }
 
 const bpArea = {
-    width: 400,
-    height: 400
+    width: 4000,
+    height: 4000
 }
 
 const sizeBPContainer = {
@@ -144,7 +144,7 @@ const colors = {
     },
     _darkTheme: true,
     _tintsToChange: [] as PIXI.Sprite[],
-    pattern: 'checker',
+    pattern: 'grass',
     get darkTheme() {
         return this._darkTheme
     },

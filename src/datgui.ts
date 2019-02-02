@@ -72,9 +72,9 @@ export default function initDatGui() {
 
     if (localStorage.getItem('pattern')) G.colors.pattern = localStorage.getItem('pattern')
     themeFolder
-        .add(G.colors, 'pattern', ['checker', 'grid'])
+        .add(G.colors, 'pattern', ['grass', 'checker', 'grid'])
         .name('Pattern')
-        .onChange((val: 'checker' | 'grid') => {
+        .onChange((val: 'checker' | 'grid' | 'grass') => {
             G.BPC.generateGrid(val)
             localStorage.setItem('pattern', val)
         })

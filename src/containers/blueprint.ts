@@ -125,20 +125,29 @@ export class BlueprintContainer extends PIXI.Container {
         if (e) e.pointerOverEventHandler()
     }
 
-    generateGrid(pattern: 'checker' | 'grid' = 'checker') {
-        const gridGraphics = pattern === 'checker'
-            ? new PIXI.Graphics()
+    generateGrid(pattern: 'checker' | 'grid' | 'grass' = 'grass') {
+        var gridGraphics, grid
+		console.log(pattern)
+		if(pattern === 'checker'){
+             gridGraphics = new PIXI.Graphics()
                 .beginFill(0x808080).drawRect(0, 0, 32, 32).drawRect(32, 32, 32, 32).endFill()
                 .beginFill(0xFFFFFF).drawRect(0, 32, 32, 32).drawRect(32, 0, 32, 32).endFill()
-            : new PIXI.Graphics()
+			grid = new PIXI.extras.TilingSprite(gridGraphics.generateCanvasTexture(), G.sizeBPContainer.width, G.sizeBPContainer.height)
+			G.colors.addSpriteForAutomaticTintChange(grid)
+		} else if(pattern === 'grid') {
+			gridGraphics = new PIXI.Graphics()
                 .beginFill(0x808080).drawRect(0, 0, 32, 32).endFill()
                 .beginFill(0xFFFFFF).drawRect(1, 1, 31, 31).endFill()
-
-        const grid = new PIXI.extras.TilingSprite(gridGraphics.generateCanvasTexture(), G.sizeBPContainer.width, G.sizeBPContainer.height)
-
+			grid = new PIXI.extras.TilingSprite(gridGraphics.generateCanvasTexture(), G.sizeBPContainer.width, G.sizeBPContainer.height)
+			G.colors.addSpriteForAutomaticTintChange(grid)
+		} else if(pattern === "grass"){
+			const grassImage = new PIXI.BaseTexture.fromImage("https://i.imgur.com/QaBCphT.png") // grass-1.png from factorio
+			const grassTexture = new PIXI.Texture(grassImage, new PIXI.Rectangle(0,64,512*2,64))
+			grid = new PIXI.extras.TilingSprite(grassTexture, G.sizeBPContainer.width, G.sizeBPContainer.height)
+			
+		}
         grid.interactive = false
-        G.colors.addSpriteForAutomaticTintChange(grid)
-
+        
         if (this.grid) {
             const index = this.getChildIndex(this.grid)
             this.removeChild(this.grid)

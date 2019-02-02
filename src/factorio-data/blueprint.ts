@@ -85,30 +85,42 @@ export class Blueprint {
 		socket.on("updateEntity", data => {
 			data.entities.forEach(entity => {
 				if(entity.name == "deleted"){
-					// DeleteEntity - ??? some more info in entityPaint.ts
+					EntityContainer.mappings.get(posToId({x: entity.x+2000, y: entity.y+2000})).removeContainer()
 				} else {
-					const ec = new EntityContainer(this.createEntity(entity.name, {x: entity.x, y: entity.y}, entity.direction, undefined, true))
+					const ec = new EntityContainer(this.createEntity(entity.name, {x: entity.x+2000, y: entity.y+2000}, entity.direction, undefined, true))
 					G.BPC.entities.addChild(ec)
 					ec.redrawSurroundingEntities()
 				}
 			})
 		})
 		
+		const fetchedChunks = [];
 		// get starting area
 		setTimeout(()=>{
-		for(let xc = 0; xc < 10; xc++){
-			for(let yc = 0; yc < 10; yc++){
+		for(let xc = -5; xc < 5; xc++){
+			for(let yc = -5; yc < 5; yc++){
 				console.log(`Fetching chunk ${JSON.stringify({x:xc,y:yc})}`)
 				socket.emit("getChunk", {x:xc,y:yc}, chunkData => {
+					fetchedChunks.push({xc,yc})
 					chunkData.forEach(entity => {
 						console.log(`Drawing entity ${JSON.stringify(entity)}`)
-						const ec = new EntityContainer(this.createEntity(entity.name, {x:entity.x, y:entity.y}, Number(entity.direction)));
+						const ec = new EntityContainer(this.createEntity(entity.name, {x:entity.x+2000, y:entity.y+2000}, Number(entity.direction)));
 						G.BPC.entities.addChild(ec)
 						ec.redrawSurroundingEntities()
 					})
 				})
 			}
 		}},4000)
+		
+		// get data around the player
+		setInterval(()=>{
+			const playerPositionInBP = {
+				x: Math.abs(G.BPC.position.x) / G.BPC.viewport.getCurrentScale(),
+				y: Math.abs(G.BPC.position.y) / G.BPC.viewport.getCurrentScale()
+			}
+			console.log(playerPositionInBP)
+		},1000)
+		
 
         return this
     }
