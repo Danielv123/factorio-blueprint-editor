@@ -115,10 +115,12 @@ export class Blueprint {
 		// get data around the player
 		setInterval(()=>{
 			const playerPositionInBP = {
-				x: Math.abs(G.BPC.position.x) / G.BPC.viewport.getCurrentScale(),
-				y: Math.abs(G.BPC.position.y) / G.BPC.viewport.getCurrentScale()
+				x: (Math.abs(G.BPC.position.x +G.BPC.viewport.getMiddle().x)/ G.BPC.viewport.getCurrentScale())/32,
+				y: (Math.abs(G.BPC.position.y +G.BPC.viewport.getMiddle().y)/ G.BPC.viewport.getCurrentScale())/32
 			}
+			// console.log(G.BPC.viewport.getMiddle())
 			console.log(playerPositionInBP)
+			// G.BPC.viewport.middle
 		},1000)
 		
 

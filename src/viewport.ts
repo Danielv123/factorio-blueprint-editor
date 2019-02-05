@@ -40,7 +40,16 @@ export class Viewport {
 
         this.transform = new PIXI.Matrix()
     }
-
+	getMiddle(){
+		// return {
+			// x: this.viewPortPosition.x + this.viewPortSize.width / 2,
+			// y: this.viewPortPosition.y + this.viewPortSize.height / 2
+		// }
+		return {
+			x: this.viewPortPosition.x,
+			y: this.viewPortPosition.y
+		}
+	}
     updateTransform() {
         const t = this.getTransform()
         this.container.setTransform(t.tx, t.ty, t.a, t.d)
