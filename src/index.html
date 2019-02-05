@@ -6,21 +6,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>BlueprintEditor</title>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js"></script>
     <link rel="icon" href="favicon.png">
-    <link href="https://fonts.googleapis.com/css?family=Roboto:400,500" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500" rel="stylesheet">
 </head>
 <body oncontextmenu="return false;">
     <div id="loadingScreen" class="active">
         <img id="logo" src="logo.svg">
         <h1 id="loadingMsg">Loading...</h1>
     </div>
-	<script>
-		// Connect to clusterio master
-		socket = io.connect("localhost:8080");
-		socket.on("hello", () => socket.emit("registerMapEditor"))
-		
-	</script>
     <script src="app.ts"></script>
 </body>
 </html>

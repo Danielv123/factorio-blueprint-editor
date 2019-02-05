@@ -3,15 +3,16 @@ import { Viewport } from '../viewport'
 import { WiresContainer } from './wires'
 import { UnderlayContainer } from './underlay'
 import { EntitySprite } from '../entitySprite'
-import { AdjustmentFilter } from '@pixi/filter-adjustment'
 import { EntityContainer } from './entity'
 import { OverlayContainer } from './overlay'
 import { EntityPaintContainer } from './entityPaint'
 import { TileContainer } from './tile'
 import { TilePaintContainer } from './tilePaint'
 import util from '../common/util'
-import factorioData from '../factorio-data/factorioData'
+import FD from 'factorio-data'
 import actions from '../actions'
+import Entity from '../factorio-data/entity'
+import Tile from '../factorio-data/tile'
 
 export class BlueprintContainer extends PIXI.Container {
 
@@ -21,13 +22,11 @@ export class BlueprintContainer extends PIXI.Container {
     underlayContainer: UnderlayContainer
     tiles: PIXI.Container
     entities: PIXI.Container
-    movingEntityFilter: AdjustmentFilter
     tileSprites: PIXI.Container
     entitySprites: PIXI.Container
     viewport: Viewport
     pgOverlay: PIXI.Graphics
     hoverContainer: undefined | EntityContainer
-    movingContainer: undefined | EntityContainer
     paintContainer: undefined | EntityPaintContainer | TilePaintContainer
 
     constructor() {
@@ -37,9 +36,7 @@ export class BlueprintContainer extends PIXI.Container {
         this.viewport = new Viewport(this, G.sizeBPContainer, G.positionBPContainer, {
             width: G.app.screen.width,
             height: G.app.screen.height
-        }, 5)
-
-        this.movingEntityFilter = new AdjustmentFilter({ red: 0.4, blue: 0.4, green: 1 })
+        }, 3)
 
         this.generateGrid(G.colors.pattern)
 
@@ -110,7 +107,6 @@ export class BlueprintContainer extends PIXI.Container {
         }
 
         G.gridData.onUpdate(() => {
-            if (this.movingContainer) this.movingContainer.moveAtCursor()
             if (this.paintContainer) this.paintContainer.moveAtCursor()
 
             // Instead of decreasing the global interactionFrequency, call the over and out entity events here
@@ -162,23 +158,26 @@ export class BlueprintContainer extends PIXI.Container {
     initBP() {
         const firstRail = G.bp.getFirstRail()
         if (firstRail) {
-                G.railMoveOffset = {
+            G.railMoveOffset = {
                 x: Math.abs(firstRail.position.x) % 2 + 1,
                 y: Math.abs(firstRail.position.y) % 2 + 1
             }
         }
 
         // Render Bp
-        for (const entity_number of G.bp.rawEntities.keys()) {
-            this.entities.addChild(new EntityContainer(entity_number, false))
-        }
-        G.bp.tiles.forEach((v, k) => {
-            this.tiles.addChild(new TileContainer(v, { x: Number(k.split(',')[0]), y: Number(k.split(',')[1]) }))
-        })
+        G.bp.entities.forEach(e => new EntityContainer(e, false))
+        G.bp.entities.forEach(e => this.wiresContainer.add(e.connections))
+        G.bp.tiles.forEach(t => new TileContainer(t))
+
+        G.bp.on('create', (entity: Entity) => new EntityContainer(entity))
+        G.bp.on('create', (entity: Entity) => this.wiresContainer.add(entity.connections))
+        G.bp.on('create', () => this.wiresContainer.updatePassiveWires())
+        G.bp.on('destroy', () => this.wiresContainer.updatePassiveWires())
+
+        G.bp.on('create_t', (tile: Tile) => new TileContainer(tile))
 
         this.sortEntities()
         this.wiresContainer.updatePassiveWires()
-        this.wiresContainer.drawWires()
         this.updateOverlay()
         this.centerViewport()
 
@@ -201,7 +200,6 @@ export class BlueprintContainer extends PIXI.Container {
         this.removeChildren()
 
         this.hoverContainer = undefined
-        this.movingContainer = undefined
         this.paintContainer = undefined
 
         this.tileSprites = new PIXI.Container()
@@ -240,8 +238,6 @@ export class BlueprintContainer extends PIXI.Container {
         );
 
         (this.entitySprites.children as EntitySprite[]).sort((a, b) => {
-            if (a.isMoving && !b.isMoving) return 1
-            if (b.isMoving && !a.isMoving) return -1
             const dZ = a.zIndex - b.zIndex
             if (dZ !== 0) return dZ
             const dY = (a.y - a.shift.y) - (b.y - b.shift.y)
@@ -334,7 +330,7 @@ export class BlueprintContainer extends PIXI.Container {
     }
 
     spawnEntityAtMouse(itemName: string) {
-        const itemData = factorioData.getItem(itemName)
+        const itemData = FD.items[itemName]
         const tileResult = itemData.place_as_tile && itemData.place_as_tile.result
         const placeResult = itemData.place_result || tileResult
 
@@ -356,7 +352,7 @@ export class BlueprintContainer extends PIXI.Container {
                 0,
                 EntityContainer.getPositionFromData(
                     G.gridData.position,
-                    util.switchSizeBasedOnDirection(factorioData.getEntity(placeResult).size, 0)
+                    util.switchSizeBasedOnDirection(FD.entities[placeResult].size, 0)
                 )
             )
             this.addChild(this.paintContainer)

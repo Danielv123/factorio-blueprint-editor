@@ -1,14 +1,15 @@
 import G from '../common/globals'
 import util from '../common/util'
-import factorioData from '../factorio-data/factorioData'
+import FD from 'factorio-data'
 import { EntityContainer } from './entity'
 import { AdjustmentFilter } from '@pixi/filter-adjustment'
 import { UnderlayContainer } from './underlay'
 import { InventoryContainer } from '../panels/inventory'
+import { EntitySprite } from '../entitySprite'
 
 export class EntityPaintContainer extends PIXI.Container {
     areaVisualization: PIXI.Sprite | PIXI.Sprite[] | undefined
-    directionType: string
+    directionType: 'input' | 'output'
     direction: number
     filter: AdjustmentFilter
     icon: PIXI.DisplayObject
@@ -75,16 +76,16 @@ export class EntityPaintContainer extends PIXI.Container {
     }
 
     getItemName() {
-        return factorioData.getEntity(this.name).minable.result
+        return FD.entities[this.name].minable.result
     }
 
     checkBuildable() {
         const position = EntityContainer.getGridPosition(this.position)
-        const size = util.switchSizeBasedOnDirection(factorioData.getEntity(this.name).size, this.direction)
+        const size = util.switchSizeBasedOnDirection(FD.entities[this.name].size, this.direction)
         if (!EntityContainer.isContainerOutOfBpArea(position, size) &&
             (G.bp.entityPositionGrid.checkFastReplaceableGroup(this.name, this.direction, position) ||
             G.bp.entityPositionGrid.checkSameEntityAndDifferentDirection(this.name, this.direction, position) ||
-            G.bp.entityPositionGrid.checkNoOverlap(this.name, this.direction, position))
+            G.bp.entityPositionGrid.isAreaAvalible(this.name, position, this.direction))
         ) {
             this.filter.red = 0.4
             this.filter.green = 1
@@ -95,9 +96,9 @@ export class EntityPaintContainer extends PIXI.Container {
     }
 
     updateUndergroundBeltRotation() {
-        const fd = factorioData.getEntity(this.name)
+        const fd = FD.entities[this.name]
         if (fd.type === 'underground_belt') {
-            const otherEntity = G.bp.entityPositionGrid.findEntityWithSameNameAndDirection(
+            const otherEntity = G.bp.entityPositionGrid.getOpposingEntity(
                 this.name, (this.direction + 4) % 8, {
                     x: this.x / 32,
                     y: this.y / 32
@@ -106,7 +107,7 @@ export class EntityPaintContainer extends PIXI.Container {
                 fd.max_distance
             )
             if (otherEntity) {
-                const oe = G.bp.entity(otherEntity)
+                const oe = G.bp.entities.get(otherEntity)
                 this.directionType = oe.directionType === 'input' ? 'output' : 'input'
             } else {
                 if (this.directionType === 'output') this.directionType = 'input'
@@ -125,11 +126,11 @@ export class EntityPaintContainer extends PIXI.Container {
     }
 
     rotate(ccw = false) {
-        const pr = factorioData.getEntity(this.name).possible_rotations
+        const pr = FD.entities[this.name].possible_rotations
         if (!pr) return
         this.direction = pr[ (pr.indexOf(this.direction) + (ccw ? 3 : 1)) % pr.length ]
         this.redraw()
-        const size = util.switchSizeBasedOnDirection(factorioData.getEntity(this.name).size, this.direction)
+        const size = util.switchSizeBasedOnDirection(FD.entities[this.name].size, this.direction)
         if (size.x !== size.y) {
             const offset = G.gridData.calculateRotationOffset(this.position)
             this.x += offset.x * 32
@@ -145,12 +146,12 @@ export class EntityPaintContainer extends PIXI.Container {
 
     redraw() {
         this.removeChildren()
-        this.addChild(...EntityContainer.getParts({
+        this.addChild(...EntitySprite.getParts({
             name: this.name,
             direction: this.directionType === 'output' ? (this.direction + 4) % 8 : this.direction,
             directionType: this.directionType
         }, G.hr, true))
-        const size = util.switchSizeBasedOnDirection(factorioData.getEntity(this.name).size, this.direction)
+        const size = util.switchSizeBasedOnDirection(FD.entities[this.name].size, this.direction)
         this.hitArea = new PIXI.Rectangle(
             -size.x * 16,
             -size.y * 16,
@@ -172,7 +173,7 @@ export class EntityPaintContainer extends PIXI.Container {
                 )
                 break
             default:
-                const size = util.switchSizeBasedOnDirection(factorioData.getEntity(this.name).size, this.direction)
+                const size = util.switchSizeBasedOnDirection(FD.entities[this.name].size, this.direction)
                 const pos = EntityContainer.getPositionFromData(position, size)
                 this.position.set(pos.x, pos.y)
         }
@@ -188,22 +189,22 @@ export class EntityPaintContainer extends PIXI.Container {
 
     removeContainerUnder() {
         const position = EntityContainer.getGridPosition(this.position)
-        const c = EntityContainer.mappings.get(G.bp.entityPositionGrid.getCellAtPosition(position))
-        if (c) {
-            c.removeContainer()
+        const entity = G.bp.entities.get(G.bp.entityPositionGrid.getCellAtPosition(position))
+        if (entity) {
+            G.bp.removeEntity(entity)
             this.checkBuildable()
         }
     }
 
     placeEntityContainer() {
-        const fd = factorioData.getEntity(this.name)
+        const fd = FD.entities[this.name]
         const position = EntityContainer.getGridPosition(this.position)
         const size = util.switchSizeBasedOnDirection(fd.size, this.direction)
         if (EntityContainer.isContainerOutOfBpArea(position, size)) return
 
         const frgEntNr = G.bp.entityPositionGrid.checkFastReplaceableGroup(this.name, this.direction, position)
         if (frgEntNr) {
-            const frgEnt = G.bp.entity(frgEntNr)
+            const frgEnt = G.bp.entities.get(frgEntNr)
             frgEnt.change(this.name, this.direction)
             const c = EntityContainer.mappings.get(frgEntNr)
             c.redraw()
@@ -215,7 +216,7 @@ export class EntityPaintContainer extends PIXI.Container {
             this.name, this.direction, position
         )
         if (snEntNr) {
-            G.bp.entity(snEntNr).direction = this.direction
+            G.bp.entities.get(snEntNr).direction = this.direction
             const c = EntityContainer.mappings.get(snEntNr)
             c.redraw()
             c.redrawSurroundingEntities()
@@ -224,23 +225,18 @@ export class EntityPaintContainer extends PIXI.Container {
         }
 
         const isUB = fd.type === 'underground_belt'
-        const res = G.bp.createEntity(this.name, position,
-            isUB && this.directionType === 'output' ? (this.direction + 4) % 8 : this.direction,
-            isUB ? this.directionType : undefined
-        )
-        if (res) {
-            const ec = new EntityContainer(res)
-            if (ec.areaVisualization) {
-                if (ec.areaVisualization instanceof PIXI.Sprite) {
-                    ec.areaVisualization.visible = true
-                } else {
-                    for (const s of ec.areaVisualization) s.visible = true
-                }
-            }
-            G.BPC.entities.addChild(ec)
-            ec.redrawSurroundingEntities()
+        const direction = isUB && this.directionType === 'output' ? (this.direction + 4) % 8 : this.direction
 
-            if (fd.type === 'electric_pole') G.BPC.wiresContainer.updatePassiveWires()
+        if (G.bp.entityPositionGrid.isAreaAvalible(this.name, position, direction)) {
+            const newEntity = G.bp.createEntity({
+                name: this.name,
+                position,
+                direction,
+                type: isUB ? this.directionType : undefined
+            })
+
+            const ec = EntityContainer.mappings.get(newEntity.entity_number)
+            UnderlayContainer.modifyVisualizationArea(ec.areaVisualization, s => s.visible = true)
 
             if (isUB || this.name === 'pipe_to_ground') {
                 this.direction = (this.direction + 4) % 8

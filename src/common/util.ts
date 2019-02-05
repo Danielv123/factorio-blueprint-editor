@@ -112,13 +112,24 @@ function nearestPowerOf2(n: number) {
     return Math.pow(2, Math.ceil(Math.log2(n)))
 }
 
-function uniqueInArray(array: []) {
+function uniqueInArray(array: any[]) {
     return [...new Set(array)]
 }
 
-function equalArrays(array1: [], array2: []) {
+function equalArrays(array1: any[], array2: any[]) {
     return array1 && array2 && array1.length === array2.length &&
         array1.sort().every((value, index) => value === array2.sort()[index])
+}
+
+function areObjectsEquivalent(a: { [key: string]: any }, b: { [key: string]: any }) {
+    const aProps = Object.getOwnPropertyNames(a)
+    const bProps = Object.getOwnPropertyNames(b)
+
+    if (aProps.length !== bProps.length) return false
+
+    for (const propName of aProps) if (a[propName] !== b[propName]) return false
+
+    return true
 }
 
 function timer(name: string) {
@@ -147,5 +158,6 @@ export default {
     nearestPowerOf2,
     uniqueInArray,
     equalArrays,
+    areObjectsEquivalent,
     timer
 }

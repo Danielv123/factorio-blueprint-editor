@@ -1,39 +1,79 @@
-import getEntity from './entity'
-import factorioData from './factorioData'
+import Entity from './entity'
+import FD from 'factorio-data'
 import { PositionGrid } from './positionGrid'
-import Immutable from 'immutable'
 import G from '../common/globals'
-import { ConnectionsManager } from './connectionsManager'
-import { EntityContainer } from '../containers/entity'
 import generators from './generators'
 import util from '../common/util'
+import * as History from './history'
+import EventEmitter from 'eventemitter3'
+import Tile from './tile'
+import io from 'socket.io-client'
 
-export class Blueprint {
+class OurMap<K, V> extends Map<K, V> {
+
+    constructor(values?: V[], mapFn?: (value: V) => K) {
+        if (values) {
+            super(values.map(e => [mapFn(e), e] as [K, V]))
+        } else {
+            super()
+        }
+    }
+
+    isEmpty() {
+        return this.size === 0
+    }
+
+    find(predicate: (value: V, key: K) => boolean): V {
+        for (const [k, v] of this) {
+            if (predicate(v, k)) return v
+        }
+        return undefined
+    }
+
+    filter(predicate: (value: V, key: K) => boolean): V[] {
+        const result: V[] = []
+        this.forEach((v, k) => {
+            if (predicate(v, k)) result.push(v)
+        })
+        return result
+    }
+}
+
+interface IEntityData extends Omit<BPS.IEntity, 'entity_number'> {
+    entity_number?: number
+}
+
+/** Blueprint base class */
+export default class Blueprint extends EventEmitter {
 
     name: string
     icons: any[]
-    tiles: Immutable.Map<string, string>
     version: number
-    connections: ConnectionsManager
-    next_entity_number: number
-    historyIndex: number
-    history: IHistoryObject[]
-    bp: Blueprint
     entityPositionGrid: PositionGrid
-    rawEntities: Immutable.Map<number, any>
+    entities: OurMap<number, Entity>
+    tiles: OurMap<string, Tile>
+    socket: SocketIOClient.Socket
 
-    constructor(data?: any) {
+    private m_next_entity_number = 1
+
+    constructor(data?: BPS.IBlueprint) {
+        super()
+
         this.name = 'Blueprint'
         this.icons = []
-        this.rawEntities = Immutable.Map()
-        this.tiles = Immutable.Map()
-        this.version = undefined
-        this.next_entity_number = 1
+        this.version = 68722819072
+        this.entities = new OurMap()
+        this.tiles = new OurMap()
+        this.entityPositionGrid = new PositionGrid(this)
+
+        // Connect to clusterio master
+        this.socket = io.connect('localhost:8080')
+        this.socket.on('hello', () => this.socket.emit('registerMapEditor'))
 
         if (data) {
             this.name = data.label
             this.version = data.version
-            if (data.icons) data.icons.forEach((icon: any) => this.icons[icon.index - 1] = icon.signal.name)
+            if (data.icons) data.icons.forEach(icon => this.icons[icon.index - 1] = icon.signal.name)
 
             const offset = {
                 x: G.sizeBPContainer.width / 64,
@@ -41,288 +81,230 @@ export class Blueprint {
             }
 
             if (data.tiles) {
-                this.tiles = this.tiles.withMutations(map =>
-                    data.tiles.forEach((tile: any) =>
-                        map.set(`${tile.position.x + offset.x + 0.5},${tile.position.y + offset.y + 0.5}`, tile.name)
-                    )
+                this.tiles = new OurMap(
+                    data.tiles.map(tile =>
+                        new Tile(tile.name, { x: tile.position.x + offset.x + 0.5, y: tile.position.y + offset.y + 0.5 })),
+                    t => t.hash
                 )
             }
 
-            if (data.entities) {
-                this.next_entity_number += data.entities.length
+            if (data.entities !== undefined) {
+                this.m_next_entity_number += data.entities.length
 
-                this.rawEntities = this.rawEntities.withMutations(map => {
-                    for (const entity of data.entities) {
-                        map.set(entity.entity_number, Immutable.fromJS(entity))
-                    }
-                })
+                const firstEntity = data.entities
+                    .find(e => !FD.entities[e.name].flags.includes('placeable_off_grid'))
+                const firstEntityTopLeft = {
+                    x: firstEntity.position.x - (FD.entities[firstEntity.name].size.width / 2),
+                    y: firstEntity.position.y - (FD.entities[firstEntity.name].size.height / 2)
+                }
 
-                // TODO: if entity has placeable-off-grid flag then take the next one
-                const firstEntityTopLeft = this.firstEntity().topLeft()
                 offset.x += (firstEntityTopLeft.x % 1 !== 0 ? 0.5 : 0)
                 offset.y += (firstEntityTopLeft.y % 1 !== 0 ? 0.5 : 0)
 
-                this.rawEntities = this.rawEntities.withMutations(map => {
-                    map.keySeq().forEach(k => map
-                        .updateIn([k, 'position', 'x'], x => x + offset.x)
-                        .updateIn([k, 'position', 'y'], y => y + offset.y)
-                    )
-                })
+                History.startTransaction()
+
+                this.entities = new OurMap(
+                    data.entities.map(e => this.createEntity({
+                        ...e,
+                        position: {
+                            x: e.position.x + offset.x,
+                            y: e.position.y + offset.y
+                        }
+                    })),
+                    e => e.entity_number
+                )
+
+                History.commitTransaction()
             }
         }
 
-        this.entityPositionGrid = new PositionGrid(this, [...this.rawEntities.keys()])
-        this.connections = new ConnectionsManager(this, [...this.rawEntities.keys()])
+        // makes initial entities non undoable and resets the history if the user cleared the editor
+        History.reset()
 
-        this.historyIndex = 0
-        this.history = [{
-            entity_number: 0,
-            type: 'init',
-            annotation: '',
-            rawEntities: this.rawEntities
-        }]
-		
-		socket.on("updateEntity", data => {
-			data.entities.forEach(entity => {
-				if(entity.name == "deleted"){
-					EntityContainer.mappings.get(posToId({x: entity.x+2000, y: entity.y+2000})).removeContainer()
-				} else {
-					const ec = new EntityContainer(this.createEntity(entity.name, {x: entity.x+2000, y: entity.y+2000}, entity.direction, undefined, true))
-					G.BPC.entities.addChild(ec)
-					ec.redrawSurroundingEntities()
-				}
-			})
-		})
-		
-		const fetchedChunks = [];
-		// get starting area
-		setTimeout(()=>{
-		for(let xc = -5; xc < 5; xc++){
-			for(let yc = -5; yc < 5; yc++){
-				console.log(`Fetching chunk ${JSON.stringify({x:xc,y:yc})}`)
-				socket.emit("getChunk", {x:xc,y:yc}, chunkData => {
-					fetchedChunks.push({xc,yc})
-					chunkData.forEach(entity => {
-						console.log(`Drawing entity ${JSON.stringify(entity)}`)
-						const ec = new EntityContainer(this.createEntity(entity.name, {x:entity.x+2000, y:entity.y+2000}, Number(entity.direction)));
-						G.BPC.entities.addChild(ec)
-						ec.redrawSurroundingEntities()
-					})
-				})
-			}
-		}},4000)
-		
-		// get data around the player
-		setInterval(()=>{
-			const playerPositionInBP = {
-				x: (Math.abs(G.BPC.position.x +G.BPC.viewport.getMiddle().x)/ G.BPC.viewport.getCurrentScale())/32,
-				y: (Math.abs(G.BPC.position.y +G.BPC.viewport.getMiddle().y)/ G.BPC.viewport.getCurrentScale())/32
-			}
-			// console.log(G.BPC.viewport.getMiddle())
-			console.log(playerPositionInBP)
-			// G.BPC.viewport.middle
-		},1000)
-		
+        this.socket.on('updateEntity', data => {
+            data.entities.forEach(entity => {
+                if (entity.name === 'deleted') {
+                    this.removeEntity(this.entities.get(posToId({ x: entity.x + 2000, y: entity.y + 2000 })), false)
+                } else {
+                    this.createEntity({
+                        name: entity.name,
+                        entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
+                        position: { x: entity.x + 2000, y: entity.y + 2000 },
+                        direction: entity.direction
+                    }, false)
+                }
+            })
+        })
+
+        const fetchedChunks = []
+        // get starting area
+        setTimeout(() => {
+            for (let xc = -5; xc < 5; xc++) {
+                for (let yc = -5; yc < 5; yc++) {
+                    console.log(`Fetching chunk ${JSON.stringify({ x: xc, y: yc })}`)
+                    this.socket.emit('getChunk', { x: xc, y: yc }, chunkData => {
+                        fetchedChunks.push({ xc, yc })
+                        chunkData.forEach(entity => {
+                            console.log(`Drawing entity ${JSON.stringify(entity)}`)
+                            this.createEntity({
+                                name: entity.name,
+                                entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
+                                position: { x: entity.x + 2000, y: entity.y + 2000 },
+                                direction: entity.direction
+                            }, false)
+                        })
+                    })
+                }
+            }
+        }, 4000)
+
+        // get data around the player
+        setInterval(() => {
+            const playerPositionInBP = {
+                x: (Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) / G.BPC.viewport.getCurrentScale()) / 32,
+                y: (Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale()) / 32
+            }
+            // console.log(G.BPC.viewport.getMiddle())
+            console.log(playerPositionInBP)
+            // G.BPC.viewport.middle
+        }, 1000)
 
         return this
     }
 
-    entity(entity_number: number) {
-        const e = this.rawEntities.get(entity_number)
-        if (!e) return undefined
-        return getEntity(e, this)
+    createEntity(rawData: IEntityData, notifyServer = true) {
+        const rawEntity = new Entity({
+            ...rawData,
+            entity_number: rawData.entity_number ? rawData.entity_number : this.next_entity_number
+        }, this)
+
+        History
+            .updateMap(this.entities, rawEntity.entity_number, rawEntity, `Added entity: ${rawEntity.name}`)
+            .type('add')
+            .emit((newValue: Entity, oldValue: Entity) => this.onCreateOrRemoveEntity(newValue, oldValue, notifyServer))
+            .commit()
+
+        return rawEntity
     }
 
-    firstEntity() {
-        return getEntity(this.rawEntities.first(), this)
+    removeEntity(entity: Entity, notifyServer = true) {
+        History.startTransaction(`Deleted entity: ${entity.name}`)
+
+        entity.removeAllConnections()
+
+        History
+            .updateMap(this.entities, entity.entity_number, undefined, undefined, true)
+            .type('del')
+            .emit((newValue: Entity, oldValue: Entity) => this.onCreateOrRemoveEntity(newValue, oldValue, notifyServer))
+
+        History.commitTransaction()
     }
 
-    undo(
-        pre: (hist: IHistoryObject) => void,
-        post: (hist: IHistoryObject) => void
-    ) {
-        if (this.historyIndex === 0) return
-        const hist = this.history[this.historyIndex--]
+    onCreateOrRemoveEntity(newValue: Entity, oldValue: Entity, notifyServer = true) {
+        if (newValue === undefined) {
+            this.entityPositionGrid.removeTileData(oldValue)
+            oldValue.destroy()
+            this.emit('destroy')
 
-        switch (hist.type) {
-            case 'add':
-            case 'del':
-            case 'mov':
-                this.entityPositionGrid.undo()
-        }
-
-        pre(hist)
-        this.rawEntities = this.history[this.historyIndex].rawEntities
-        switch (hist.type) {
-            case 'del':
-                if (this.entity(hist.entity_number).hasConnections) this.connections.undo()
-        }
-        post(hist)
-    }
-
-    redo(
-        pre: (hist: IHistoryObject) => void,
-        post: (hist: IHistoryObject) => void
-    ) {
-        if (this.historyIndex === this.history.length - 1) return
-        const hist = this.history[++this.historyIndex]
-
-        switch (hist.type) {
-            case 'add':
-            case 'del':
-            case 'mov':
-                this.entityPositionGrid.redo()
-        }
-
-        pre(hist)
-
-        const entity = this.entity(hist.entity_number)
-        switch (hist.type) {
-            case 'del':
-                if (entity.hasConnections) this.connections.redo()
-        }
-
-        this.rawEntities = hist.rawEntities
-
-        // TODO: Refactor this somehow
-        if (hist.type === 'del' && entity.hasConnections && entity.connectedEntities) {
-            for (const entNr of entity.connectedEntities) {
-                EntityContainer.mappings.get(entNr).redraw()
-            }
-        }
-
-        post(hist)
-    }
-
-    operation(
-        entity_number: number,
-        annotation: string,
-        fn: (entities: Immutable.Map<number, any>) => Immutable.Map<any, any>,
-        type: 'add' | 'del' | 'mov' | 'upd' = 'upd',
-        pushToHistory = true,
-        other_entity?: number
-    ) {
-        console.log(`${entity_number} - ${annotation}`)
-        this.rawEntities = fn(this.rawEntities)
-
-        if (pushToHistory) {
-            if (this.historyIndex < this.history.length) {
-                this.history = this.history.slice(0, this.historyIndex + 1)
-            }
-            this.history.push({
-                entity_number,
-                other_entity,
-                type,
-                annotation,
-                rawEntities: this.rawEntities
-            })
-            this.historyIndex++
-        }
-    }
-
-    createEntity(name: string, position: IPoint, direction: number, directionType?: string, fakingIt?: boolean) {
-        if (!this.entityPositionGrid.checkNoOverlap(name, direction, position)) return false
-        // console.log(position)
-        const entity_number = posToId(position)
-        const data = {
-            entity_number,
-            name,
-            position,
-            direction,
-            type: directionType
-        }
-        if (!directionType) delete data.type
-		
-		// remoteMap sync changes to factorio server via master
-		if(fakingIt !== true){
-			socket.emit("createEntity", {entity:{
-				name: name.replace(/[_]/g, "-"), // replace _ with -
-				position,
-				direction
-			}})
-		}
-        this.operation(entity_number, 'Added new entity',
-            entities => entities.set(entity_number, Immutable.fromJS(data)),
-            'add'
-        )
-
-        this.entityPositionGrid.setTileData(entity_number)
-
-        return data.entity_number
-    }
-
-    removeEntity(entity_number: number, redrawCb?: (entity_number: number) => void) {
-        this.entityPositionGrid.removeTileData(entity_number)
-        let entitiesToModify: any[] = []
-        if (this.entity(entity_number).hasConnections) {
-            entitiesToModify = this.connections.removeConnectionData(entity_number)
-        }
-		// remoteMap sync changes to factorio server via master
-		socket.emit("deleteEntity", {
-			entity: {
-				position: idToPos(entity_number)
-			}
-		})
-        this.operation(entity_number, 'Deleted entity',
-            entities => entities.withMutations(map => {
-
-                for (const i in entitiesToModify) {
-                    const entity_number = entitiesToModify[i].entity_number
-                    const side = entitiesToModify[i].side
-                    const color = entitiesToModify[i].color
-                    const index = entitiesToModify[i].index
-
-                    const connections = this.entity(entity_number).connections
-                    const a = connections.size === 1
-                    const b = connections[side].size === 1
-                    const c = connections[side][color].size === 1
-                    if (a && b && c) {
-                        map.removeIn([entity_number, 'connections'])
-                    } else if (b && c) {
-                        map.removeIn([entity_number, 'connections', side])
-                    } else if (c) {
-                        map.removeIn([entity_number, 'connections', side, color])
-                    } else {
-                        map.removeIn([entity_number, 'connections', side, color, index])
+            // remoteMap sync changes to factorio server via master
+            if (notifyServer) {
+                this.socket.emit('deleteEntity', {
+                    entity: {
+                        position: idToPos(oldValue.entity_number)
                     }
-                }
+                })
+            }
+        } else {
+            this.entityPositionGrid.setTileData(newValue)
+            this.emit('create', newValue)
 
-                map.delete(entity_number)
-            }),
-            'del'
-        )
-        for (const i in entitiesToModify) {
-            redrawCb(entitiesToModify[i].entity_number)
+            // remoteMap sync changes to factorio server via master
+            if (notifyServer) {
+                this.socket.emit('createEntity', {
+                    entity: {
+                        ...newValue.getRawData(),
+                        name: newValue.name.replace(/_/g, '-') // replace _ with -
+                    }
+                })
+            }
         }
+    }
+
+    createTiles(name: string, positions: IPoint[]) {
+        History.startTransaction(`Added tiles: ${name}`)
+
+        positions.forEach(p => {
+            const existingTile = this.tiles.get(`${p.x},${p.y}`)
+
+            if (existingTile && existingTile.name !== name) {
+                History
+                    .updateMap(this.tiles, existingTile.hash, undefined, undefined, true)
+                    .type('del')
+                    .emit(this.onCreateOrRemoveTile.bind(this))
+            }
+
+            if (!existingTile || (existingTile && existingTile.name !== name)) {
+                const tile = new Tile(name, p)
+
+                // TODO: fix the error here, it's because tiles don't have an entity number
+                // maybe change the History to accept a function or a variable that will be used as an identifier for logging
+                History
+                    .updateMap(this.tiles, tile.hash, tile)
+                    .type('add')
+                    .emit(this.onCreateOrRemoveTile.bind(this))
+            }
+        })
+
+        History.commitTransaction()
+    }
+
+    removeTiles(positions: IPoint[]) {
+        History.startTransaction(`Deleted tiles`)
+
+        positions.forEach(p => {
+            const tile = this.tiles.get(`${p.x},${p.y}`)
+            if (tile) {
+                History
+                    .updateMap(this.tiles, tile.hash, undefined, undefined, true)
+                    .type('del')
+                    .emit(this.onCreateOrRemoveTile.bind(this))
+            }
+        })
+
+        History.commitTransaction()
+    }
+
+    onCreateOrRemoveTile(newValue: Tile, oldValue: Tile) {
+        if (newValue === undefined) {
+            oldValue.destroy()
+        } else {
+            this.emit('create_t', newValue)
+        }
+    }
+
+    get next_entity_number() {
+        return this.m_next_entity_number++
     }
 
     getFirstRail() {
-        const fR = this.rawEntities.find(v => v.get('name') === 'straight_rail' || v.get('name') === 'curved_rail')
-        return fR ? fR.toJS() : undefined
-    }
-
-    createTile(name: string, position: IPoint) {
-        this.tiles = this.tiles.set(`${position.x},${position.y}`, name)
-    }
-
-    removeTile(position: IPoint) {
-        this.tiles = this.tiles.remove(`${position.x},${position.y}`)
+        return this.entities.find(e => e.name === 'straight_rail' /* || e.name === 'curved_rail' */)
     }
 
     isEmpty() {
-        return this.rawEntities.isEmpty() && this.tiles.isEmpty()
+        return this.entities.isEmpty() && this.tiles.isEmpty()
     }
 
     // Get corner/center positions
     getPosition(f: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight', xcomp: any, ycomp: any) {
         if (this.isEmpty()) return { x: 0, y: 0 }
 
-        const positions =
-            [...this.rawEntities.keys()]
-                .map(k => this.entity(k)[f]()).concat(
-            [...this.tiles.keys()]
+        const positions = [
+            ...[...this.entities.keys()]
+                .map(k => this.entities.get(k)[f]()),
+            ...[...this.tiles.keys()]
                 .map(k => ({ x: Number(k.split(',')[0]), y: Number(k.split(',')[1]) }))
-                .map(p => tileCorners(p)[f]))
+                .map(p => tileCorners(p)[f])
+        ]
 
         return {
             // tslint:disable-next-line:no-unnecessary-callback-wrapper
@@ -359,19 +341,16 @@ export class Blueprint {
         const BEACONS = G.oilOutpostSettings.BEACONS
         const MIN_AFFECTED_ENTITIES = G.oilOutpostSettings.MIN_AFFECTED_ENTITIES
         const BEACON_MODULE = G.oilOutpostSettings.BEACON_MODULE
-        let lastGeneratedEntNrs = G.oilOutpostSettings.lastGeneratedEntNrs
 
-        const pumpjacks = this.rawEntities
-            .valueSeq()
-            .filter(e => e.get('name') === 'pumpjack')
-            .toJS()
+        const pumpjacks = this.entities.filter(v => v.name === 'pumpjack')
+            .map(p => ({ entity_number: p.entity_number, name: p.name, position: p.position }))
 
         if (pumpjacks.length < 2 || pumpjacks.length > 200) {
             console.error('There should be between 2 and 200 pumpjacks in the BP Area!')
             return
         }
 
-        if (pumpjacks.length !== this.rawEntities.filter((_, k) => !lastGeneratedEntNrs.includes(k)).count()) {
+        if (pumpjacks.length !== this.entities.size) {
             console.error('BP Area should only contain pumpjacks!')
             return
         }
@@ -423,63 +402,19 @@ export class Blueprint {
 
         T.stop()
 
-        this.operation(0, 'Generated Pipes!',
-            entities => entities.withMutations(map => {
-                GP.pumpjacksToRotate.forEach(p => {
-                    map.setIn([p.entity_number, 'direction'], p.direction)
-                    if (PUMPJACK_MODULE) {
-                        map.deleteIn([p.entity_number, 'items'])
-                        map.setIn([p.entity_number, 'items', PUMPJACK_MODULE], 2)
-                    }
-                })
+        History.startTransaction('Generated Oil Outpost!')
 
-                if (lastGeneratedEntNrs) {
-                    lastGeneratedEntNrs.forEach(id => {
-                        if (map.has(id)) {
-                            map.delete(id)
-                            this.entityPositionGrid.removeTileData(id)
-                            EntityContainer.mappings.get(id).destroy()
-                        }
-                    })
-                }
-                lastGeneratedEntNrs = []
-
-                GP.pipes.forEach(pipe => {
-                    const entity_number = this.next_entity_number++
-                    map.set(entity_number, Immutable.fromJS({ entity_number, ...pipe }))
-                    lastGeneratedEntNrs.push(entity_number)
-                })
-
-                if (BEACONS) {
-                    GB.beacons.forEach(beacon => {
-                        const entity_number = this.next_entity_number++
-                        map.set(entity_number, Immutable.fromJS({ entity_number, ...beacon, items: { [BEACON_MODULE]: 2 } }))
-                        lastGeneratedEntNrs.push(entity_number)
-                    })
-                }
-
-                GPO.poles.forEach(pole => {
-                    const entity_number = this.next_entity_number++
-                    map.set(entity_number, Immutable.fromJS({ entity_number, ...pole }))
-                    lastGeneratedEntNrs.push(entity_number)
-                })
-            }),
-            'upd',
-            false
-        )
+        GP.pipes.forEach(pipe => this.createEntity(pipe))
+        if (BEACONS) GB.beacons.forEach(beacon => this.createEntity({ ...beacon, items: { [BEACON_MODULE]: 2 } }))
+        GPO.poles.forEach(pole => this.createEntity(pole))
 
         GP.pumpjacksToRotate.forEach(p => {
-            const eC = EntityContainer.mappings.get(p.entity_number)
-            eC.redraw()
-            eC.redrawEntityInfo()
+            const entity = this.entities.get(p.entity_number)
+            entity.direction = p.direction
+            if (PUMPJACK_MODULE) entity.modules = [PUMPJACK_MODULE, PUMPJACK_MODULE]
         })
 
-        G.oilOutpostSettings.lastGeneratedEntNrs = lastGeneratedEntNrs
-
-        lastGeneratedEntNrs.forEach(id => this.entityPositionGrid.setTileData(id))
-        lastGeneratedEntNrs.forEach(id => G.BPC.entities.addChild(new EntityContainer(id, false)))
-        G.BPC.sortEntities()
-        G.BPC.wiresContainer.updatePassiveWires()
+        History.commitTransaction()
 
         if (!DEBUG) return
 
@@ -487,42 +422,42 @@ export class Blueprint {
         G.BPC.wiresContainer.children = []
 
         const timePerVis = 1000
-        ;
+            ;
         [
             GP.visualizations,
             BEACONS ? GB.visualizations : [],
             GPO.visualizations
         ]
-        .filter(vis => vis.length)
-        .forEach((vis, i) => {
-            vis.forEach((v, j, arr) => {
-                setTimeout(() => {
-                    const tint = v.color ? v.color : 0xFFFFFF * Math.random()
-                    v.path.forEach((p, k) => {
-                        setTimeout(() => {
-                            const s = new PIXI.Sprite(PIXI.Texture.WHITE)
-                            s.tint = tint
-                            s.anchor.set(0.5)
-                            s.alpha = v.alpha
-                            s.width = v.size
-                            s.height = v.size
-                            s.position.set(p.x * 32, p.y * 32)
-                            G.BPC.wiresContainer.addChild(s)
-                        }, k * ((timePerVis / arr.length) / v.path.length))
-                    })
-                }, j * (timePerVis / arr.length) + i * timePerVis)
+            .filter(vis => vis.length)
+            .forEach((vis, i) => {
+                vis.forEach((v, j, arr) => {
+                    setTimeout(() => {
+                        const tint = v.color ? v.color : 0xFFFFFF * Math.random()
+                        v.path.forEach((p, k) => {
+                            setTimeout(() => {
+                                const s = new PIXI.Sprite(PIXI.Texture.WHITE)
+                                s.tint = tint
+                                s.anchor.set(0.5)
+                                s.alpha = v.alpha
+                                s.width = v.size
+                                s.height = v.size
+                                s.position.set(p.x * 32, p.y * 32)
+                                G.BPC.wiresContainer.addChild(s)
+                            }, k * ((timePerVis / arr.length) / v.path.length))
+                        })
+                    }, j * (timePerVis / arr.length) + i * timePerVis)
+                })
             })
-        })
 
     }
 
     generateIcons() {
         // TODO: make this behave more like in Factorio
-        if (!this.rawEntities.isEmpty()) {
+        if (!this.entities.isEmpty()) {
             const entities: Map<string, number> = new Map()
 
-            for (const i of [...this.rawEntities.keys()]) {
-                const name = this.entity(i).name
+            for (const i of [...this.entities.keys()]) {
+                const name = this.entities.get(i).name
 
                 const value = entities.get(name)
                 entities.set(name, value ? (value + 1) : 0)
@@ -533,20 +468,16 @@ export class Blueprint {
             this.icons[0] = sortedEntities[0][0]
             if (sortedEntities.length > 1) this.icons[1] = sortedEntities[1][0]
         } else {
-            this.icons[0] = factorioData.getTile(
-                [...Immutable.Seq(this.tiles)
-                    .reduce((acc, tile) =>
-                        acc.set(tile, acc.has(tile) ? (acc.get(tile) + 1) : 0),
-                        new Map() as Map<string, number>)
-                    .entries()
-                ]
+            const tileName = Array.from(Array.from(this.tiles)
+                .reduce((map, [_, tile]) => map.set(tile, map.has(tile) ? (map.get(tile) + 1) : 0), new Map()))
                 .sort((a, b) => b[1] - a[1])[0][0]
-            ).minable.result
+
+            this.icons[0] = FD.tiles[tileName].minable.result
         }
     }
 
     getEntitiesForExport() {
-        const entityInfo = this.rawEntities.valueSeq().toJS()
+        const entityInfo = Array.from(this.entities.values()).map(e => e.getRawData())
         let entitiesJSON = JSON.stringify(entityInfo)
 
         // Tag changed ids with !
@@ -564,7 +495,7 @@ export class Blueprint {
             /"(entity_number|entity_id)":\![0-9]+?[,}]/g,
             s => s.replace('!', '')
         ))
-        .sort((a: any, b: any) => a.entity_number - b.entity_number)
+            .sort((a: any, b: any) => a.entity_number - b.entity_number)
     }
 
     toObject() {
@@ -580,34 +511,43 @@ export class Blueprint {
             e.position.x -= center.x
             e.position.y -= center.y
         }
-        const tileInfo = this.tiles.map((v, k) => ({
-            position: {
-                x: Number(k.split(',')[0]) - Math.floor(center.x) - 0.5,
-                y: Number(k.split(',')[1]) - Math.floor(center.y) - 0.5
-            },
-            name: v
-        })).valueSeq().toArray()
-        const iconData = this.icons.map((icon, i) => (
-            { signal: { type: factorioData.getItemTypeForBp(icon), name: icon }, index: i + 1 }
-        ))
+        const tileInfo = Array.from(this.tiles)
+            .map(([k, v]) => ({
+                position: {
+                    x: Number(k.split(',')[0]) - Math.floor(center.x) - 0.5,
+                    y: Number(k.split(',')[1]) - Math.floor(center.y) - 0.5
+                },
+                name: v.name
+            }))
+        const iconData = this.icons.map((icon, i) => {
+            return { signal: { type: getItemTypeForBp(icon), name: icon }, index: i + 1 }
+
+            function getItemTypeForBp(name: string) {
+                switch (FD.items[name].type) {
+                    case 'virtual_signal': return 'virtual'
+                    case 'fluid': return 'fluid'
+                    default: return 'item'
+                }
+            }
+        })
         return {
             blueprint: {
                 icons: iconData,
-                entities: this.rawEntities.isEmpty() ? undefined : entityInfo,
+                entities: this.entities.isEmpty() ? undefined : entityInfo,
                 tiles: this.tiles.isEmpty() ? undefined : tileInfo,
                 item: 'blueprint',
-                version: this.version || 0,
+                version: this.version,
                 label: this.name
             }
         }
     }
 }
 function posToId(pos: IPoint): number {
-    return Number("1" + (Math.floor(pos.x) + "").padStart(7, "0") + (Math.floor(pos.y) + "").padStart(7, "0"));
+    return Number('1' + (Math.floor(pos.x) + '').padStart(7, '0') + (Math.floor(pos.y) + '').padStart(7, '0'))
 }
 function idToPos(ID: number): IPoint {
-	let a = String(ID).substr(1)
-	let y = Number(a.substr(7))
-	let x = Number(a.slice(0,-7))
-	return {x,y}
+    const a = String(ID).substr(1)
+    const y = Number(a.substr(7))
+    const x = Number(a.slice(0, -7))
+    return { x, y }
 }

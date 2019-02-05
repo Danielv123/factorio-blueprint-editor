@@ -3,36 +3,39 @@
 if (module.hot) module.hot.dispose(() => { window.location.reload(); throw new Error('Reloading') })
 
 // tslint:disable:no-import-side-effect
-import 'normalize.css'
 import './style.styl'
 
 import * as PIXI from 'pixi.js'
 
 import { Book } from './factorio-data/book'
-import BPString from './factorio-data/BPString'
+import bpString from './factorio-data/bpString'
 
-import { InventoryContainer } from './panels/inventory'
 import G from './common/globals'
-import { EntityContainer } from './containers/entity'
+import { InventoryContainer } from './panels/inventory'
 import { EntityPaintContainer } from './containers/entityPaint'
+import { TilePaintContainer } from './containers/tilePaint'
 import { BlueprintContainer } from './containers/blueprint'
 import { ToolbarContainer } from './panels/toolbar'
 import { QuickbarContainer } from './panels/quickbar'
-import { Blueprint } from './factorio-data/blueprint'
-import { EditEntityContainer } from './panels/editEntity'
 import { InfoContainer } from './panels/info'
+import Blueprint from './factorio-data/blueprint'
 import FileSaver from 'file-saver'
-import { TilePaintContainer } from './containers/tilePaint'
 import initDoorbell from './doorbell'
 import actions from './actions'
 import initDatGui from './datgui'
 import spritesheetsLoader from './spritesheetsLoader'
+import * as Editors from './editors/factory'
+import Entity from './factorio-data/entity'
+import Dialog from './controls/dialog'
+import * as History from './factorio-data/history'
 
 if (PIXI.utils.isMobile.any) {
     const text = 'This application is not compatible with mobile devices.'
     document.getElementById('loadingMsg').innerHTML = text
     throw new Error(text)
 }
+
+console.log('\n%cLooking for the source?\nhttps://github.com/Teoxoy/factorio-blueprint-editor\n', 'color: #1f79aa; font-weight: bold')
 
 const params = window.location.search.slice(1).split('&')
 
@@ -83,23 +86,20 @@ G.app.stage.addChild(G.BPC)
 // Hack for plugging the mouse into keyboardJS
 actions.attachEventsToContainer(G.BPC)
 
-G.editEntityContainer = new EditEntityContainer()
-G.app.stage.addChild(G.editEntityContainer)
-
-G.inventoryContainer = new InventoryContainer()
-G.app.stage.addChild(G.inventoryContainer)
-
 G.toolbarContainer = new ToolbarContainer()
 G.app.stage.addChild(G.toolbarContainer)
 
 G.quickbarContainer = new QuickbarContainer(G.quickbarRows)
 G.app.stage.addChild(G.quickbarContainer)
 
-const infoContainer = new InfoContainer()
-G.app.stage.addChild(infoContainer)
-
 Promise.all(
-    [bpSource ? BPString.findBPString(bpSource) : undefined]
+    [
+        // Get bp from source
+        bpSource ? bpString.findBPString(bpSource) : undefined,
+        // Wait for fonts to get loaded
+        document.fonts.ready
+    ]
+    // Load spritesheets
     .concat(spritesheetsLoader.getAllPromises())
 )
 .then(data => {
@@ -128,8 +128,8 @@ Promise.all(
 })
 .catch(error => console.error(error))
 
-function loadBp(bpString: string, clearData = true) {
-    return BPString.decode(bpString)
+function loadBp(bp: string, clearData = true) {
+    return bpString.decode(bp)
         .then(data => {
 
             if (data instanceof Book) {
@@ -171,12 +171,12 @@ actions.copyBPString.bind(e => {
     if (G.bp.isEmpty()) return
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        BPString.encode(G.bp)
+        bpString.encode(G.bp)
             .then(s => navigator.clipboard.writeText(s))
             .then(() => console.log('Copied BP String'))
             .catch(error => console.error(error))
     } else {
-        const data = BPString.encodeSync(G.bp)
+        const data = bpString.encodeSync(G.bp)
         if (data.value) {
             e.clipboardData.setData('text/plain', data.value)
             console.log('Copied BP String')
@@ -194,7 +194,7 @@ actions.pasteBPString.bind(e => {
         Promise.resolve(e.clipboardData.getData('text'))
 
     promise
-        .then(BPString.findBPString)
+        .then(bpString.findBPString)
         .then(loadBp)
         .then(() => G.loadingScreen.hide())
         .catch(error => console.error(error))
@@ -228,16 +228,23 @@ actions.showInfo.bind(() => {
     G.BPC.overlayContainer.overlay.visible = !G.BPC.overlayContainer.overlay.visible
 })
 
-actions.info.bind(() => infoContainer.toggle())
+actions.info.bind(() => {
+    Dialog.closeAll()
+    new InfoContainer().show()
+})
 
-actions.closeWindow.bind(() => { if (G.openedGUIWindow) G.openedGUIWindow.close() })
+actions.closeWindow.bind(() => {
+    Dialog.closeLast()
+})
 
 actions.inventory.bind(() => {
-    if (G.currentMouseState !== G.mouseStates.MOVING && !G.renderOnly) {
-        if (G.openedGUIWindow) {
-            G.openedGUIWindow.close()
+    if (!G.renderOnly) {
+        // If there is a dialog open, assume user wants to close it
+        if (Dialog.anyOpen()) {
+            Dialog.closeLast()
         } else {
-            G.inventoryContainer.toggle()
+            new InventoryContainer('Inventory', undefined, G.BPC.spawnEntityAtMouse.bind(G.BPC))
+                .show()
         }
     }
 })
@@ -245,20 +252,16 @@ actions.inventory.bind(() => {
 actions.focus.bind(() => G.BPC.centerViewport())
 
 actions.rotate.bind(() => {
-    if (G.BPC.hoverContainer &&
-        (G.currentMouseState === G.mouseStates.NONE || G.currentMouseState === G.mouseStates.MOVING)
-    ) {
-        G.BPC.hoverContainer.rotate()
+    if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
+        G.BPC.hoverContainer.entity.rotate(false, true)
     } else if (G.currentMouseState === G.mouseStates.PAINTING) {
         G.BPC.paintContainer.rotate()
     }
 })
 
 actions.reverseRotate.bind(() => {
-    if (G.BPC.hoverContainer &&
-        (G.currentMouseState === G.mouseStates.NONE || G.currentMouseState === G.mouseStates.MOVING)
-    ) {
-        G.BPC.hoverContainer.rotate(true)
+    if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
+        G.BPC.hoverContainer.entity.rotate(true, true)
     } else if (G.currentMouseState === G.mouseStates.PAINTING) {
         G.BPC.paintContainer.rotate(true)
     }
@@ -270,10 +273,12 @@ actions.pippete.bind(() => {
 
         const hoverContainer = G.BPC.hoverContainer
         G.BPC.hoverContainer.pointerOutEventHandler()
-        const entity = G.bp.entity(hoverContainer.entity_number)
+
+        const entity = hoverContainer.entity
         G.BPC.paintContainer = new EntityPaintContainer(entity.name,
             entity.directionType === 'output' ? (entity.direction + 4) % 8 : entity.direction,
             hoverContainer.position)
+
         G.BPC.paintContainer.moveAtCursor()
         G.BPC.addChild(G.BPC.paintContainer)
     } else if (G.currentMouseState === G.mouseStates.PAINTING) {
@@ -296,77 +301,12 @@ actions.decreaseTileBuildingArea.bind(() => {
 })
 
 actions.undo.bind(() => {
-    G.bp.undo(
-        hist => pre(hist, 'add'),
-        hist => post(hist, 'del')
-    )
+    if (History.canUndo()) History.undo()
 })
 
 actions.redo.bind(() => {
-    G.bp.redo(
-        hist => pre(hist, 'del'),
-        hist => post(hist, 'add')
-    )
+    if (History.canRedo()) History.redo()
 })
-
-function pre(hist: IHistoryObject, addDel: string) {
-    switch (hist.type) {
-        case 'mov':
-        case addDel:
-            const e = EntityContainer.mappings.get(hist.entity_number)
-            e.redrawSurroundingEntities()
-            if (hist.type === addDel) {
-                G.BPC.wiresContainer.remove(hist.entity_number)
-                e.destroy()
-            }
-            if (hist.type === 'mov') G.BPC.wiresContainer.update(hist.entity_number)
-    }
-}
-
-function post(hist: IHistoryObject, addDel: string) {
-    function redrawEntityAndSurroundingEntities(entnr: number) {
-        const e = EntityContainer.mappings.get(entnr)
-        e.redraw()
-        e.redrawSurroundingEntities()
-    }
-    switch (hist.type) {
-        case 'mov':
-            redrawEntityAndSurroundingEntities(hist.entity_number)
-            const entity = G.bp.entity(hist.entity_number)
-            const e = EntityContainer.mappings.get(hist.entity_number)
-            e.position.set(
-                entity.position.x * 32,
-                entity.position.y * 32
-            )
-            e.updateVisualStuff()
-            break
-        case 'upd':
-            if (hist.other_entity) {
-                redrawEntityAndSurroundingEntities(hist.entity_number)
-                redrawEntityAndSurroundingEntities(hist.other_entity)
-            } else {
-                const e = EntityContainer.mappings.get(hist.entity_number)
-                e.redrawEntityInfo()
-                redrawEntityAndSurroundingEntities(hist.entity_number)
-                G.BPC.wiresContainer.update(hist.entity_number)
-                if (G.editEntityContainer.visible) {
-                    if (G.inventoryContainer.visible) G.inventoryContainer.close()
-                    G.editEntityContainer.create(hist.entity_number)
-                }
-            }
-            break
-        case addDel:
-            const ec = new EntityContainer(hist.entity_number)
-            G.BPC.entities.addChild(ec)
-            ec.redrawSurroundingEntities()
-            G.BPC.wiresContainer.update(hist.entity_number)
-    }
-
-    console.log(`${addDel === 'del' ? 'Undo' : 'Redo'} ${hist.entity_number} ${hist.annotation}`)
-    G.BPC.wiresContainer.updatePassiveWires()
-    G.BPC.updateOverlay()
-    G.BPC.updateViewportCulling()
-}
 
 actions.generateOilOutpost.bind(() => {
     G.bp.generatePipes()
@@ -390,43 +330,58 @@ actions.build.bind(() => {
 
 actions.mine.bind(() => {
     if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
-        G.BPC.hoverContainer.removeContainer()
+        G.bp.removeEntity(G.BPC.hoverContainer.entity)
     }
     if (G.BPC.paintContainer && G.currentMouseState === G.mouseStates.PAINTING) {
         G.BPC.paintContainer.removeContainerUnder()
     }
 })
 
-actions.moveEntity.bind(() => {
-    if (!G.BPC.movingContainer && G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
-        G.BPC.hoverContainer.pickUpEntityContainer()
-        return
+actions.moveEntityUp.bind(() => {
+    if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
+        G.BPC.hoverContainer.entity.moveBy({ x: 0, y: -1 })
     }
-    if (G.BPC.movingContainer) {
-        G.BPC.movingContainer.placeDownEntityContainer()
+})
+actions.moveEntityLeft.bind(() => {
+    if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
+        G.BPC.hoverContainer.entity.moveBy({ x: -1, y: 0 })
+    }
+})
+actions.moveEntityDown.bind(() => {
+    if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
+        G.BPC.hoverContainer.entity.moveBy({ x: 0, y: 1 })
+    }
+})
+actions.moveEntityRight.bind(() => {
+    if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
+        G.BPC.hoverContainer.entity.moveBy({ x: 1, y: 0 })
     }
 })
 
 actions.openEntityGUI.bind(() => {
-    if (G.BPC.hoverContainer) {
-        console.log(G.bp.entity(G.BPC.hoverContainer.entity_number).toJS())
-
+    if (G.BPC.hoverContainer !== undefined) {
+        // console.log(G.BPC.hoverContainer.entity.getRawData())
         if (G.currentMouseState === G.mouseStates.NONE) {
-            if (G.openedGUIWindow) G.openedGUIWindow.close()
-            G.editEntityContainer.create(G.BPC.hoverContainer.entity_number)
+            const editor = Editors.createEditor(G.BPC.hoverContainer.entity)
+            if (editor === undefined) return
+            Dialog.closeAll()
+            editor.show()
         }
     }
 })
 
+let entityForCopyData: Entity
 actions.copyEntitySettings.bind(() => {
-    if (G.BPC.hoverContainer) {
-        G.copyData.recipe = G.bp.entity(G.BPC.hoverContainer.entity_number).recipe
-        G.copyData.modules = G.bp.entity(G.BPC.hoverContainer.entity_number).modulesList
+    if (G.BPC.hoverContainer !== undefined) {
+        // Store reference to source entity
+        entityForCopyData = G.BPC.hoverContainer.entity
     }
 })
-
 actions.pasteEntitySettings.bind(() => {
-    if (G.BPC.hoverContainer) G.BPC.hoverContainer.pasteData()
+    if (G.BPC.hoverContainer !== undefined) {
+        // Hand over reference of source entity to target entity for pasting data
+        G.BPC.hoverContainer.entity.pasteSettings(entityForCopyData)
+    }
 })
 
 actions.quickbar1.bind(() => G.quickbarContainer.bindKeyToSlot(0))

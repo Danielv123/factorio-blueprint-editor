@@ -1,8 +1,8 @@
 import G from '../common/globals'
-import factorioData from '../factorio-data/factorioData'
+import FD from 'factorio-data'
+import Tile from '../factorio-data/tile'
 
 export class TileContainer extends PIXI.Container {
-    static mappings: Map<string, TileContainer> = new Map()
 
     static generateSprite(name: string, position: IPoint) {
         // TODO: maybe optimize this with PIXI.extras.TilingSprite and masks
@@ -12,7 +12,7 @@ export class TileContainer extends PIXI.Container {
         let texture = PIXI.utils.TextureCache[textureKey]
         if (!texture) {
             const filename = name === 'stone_path' ? 'graphics/terrain/stone-path/stone-path.png' :
-                factorioData.getTile(name).variants.material_background.hr_version.picture
+                FD.tiles[name].variants.material_background.hr_version.picture
 
             const spriteData = PIXI.Texture.fromFrame(filename)
             texture = new PIXI.Texture(spriteData.baseTexture, new PIXI.Rectangle(
@@ -31,28 +31,26 @@ export class TileContainer extends PIXI.Container {
 
     tileSprites: PIXI.Sprite[]
 
-    constructor(name: string, position: IPoint) {
+    constructor(tile: Tile) {
         super()
-
-        this.name = name
 
         this.interactive = false
         this.interactiveChildren = false
 
-        this.position.set(position.x * 32, position.y * 32)
-        TileContainer.mappings.set(`${position.x},${position.y}`, this)
+        this.position.set(tile.position.x * 32, tile.position.y * 32)
 
         this.tileSprites = []
 
-        const sprite = TileContainer.generateSprite(this.name, position)
+        const sprite = TileContainer.generateSprite(tile.name, tile.position)
         sprite.position = this.position
         this.tileSprites.push(sprite)
         G.BPC.tileSprites.addChild(sprite)
-    }
 
-    destroy() {
-        TileContainer.mappings.delete(`${this.position.x / 32},${this.position.y / 32}`)
-        for (const s of this.tileSprites) s.destroy()
-        super.destroy()
+        G.BPC.tiles.addChild(this)
+
+        tile.on('destroy', () => {
+            this.destroy()
+            for (const s of this.tileSprites) s.destroy()
+        })
     }
 }

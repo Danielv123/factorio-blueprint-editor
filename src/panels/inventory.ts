@@ -1,15 +1,14 @@
-/// <reference path="../../node_modules/factorio-data/data/prototypes/inventoryLayout.js" />
-
-import inventoryBundle from 'factorio-data/data/prototypes/inventoryLayout'
-import factorioData from '../factorio-data/factorioData'
+import FD from 'factorio-data'
 import { AdjustmentFilter } from '@pixi/filter-adjustment'
 import G from '../common/globals'
+import F from '../controls/functions'
 import Dialog from '../controls/dialog'
 import Button from '../controls/button'
 
-/**
- * Inventory Dialog will be displayed to the user if there is a need to select an item
- */
+// TODO: Optimize showing recipe when hovering with mouse over button
+// TODO: Move methods createIcon() and createIconWithAmount() to common functions class
+
+/** Inventory Dialog - Displayed to the user if there is a need to select an item */
 export class InventoryContainer extends Dialog {
 
     /**
@@ -17,17 +16,17 @@ export class InventoryContainer extends Dialog {
      * @param item - Item to create Sprite from
      * @param setAnchor - Temporar parameter to disable anchoring (this parameter may be removed again in the future)
      */
-    static createIcon(itemName: string, setAnchor: boolean = true) {
-        let item = factorioData.getItem(itemName)
+    public static createIcon(itemName: string, setAnchor: boolean = true): PIXI.DisplayObject {
+        let item = FD.items[itemName]
         // only needed for inventory group icon
-        if (!item) item = inventoryBundle.find(g => g.name === itemName)
+        if (!item) item = FD.inventoryLayout.find(g => g.name === itemName)
 
-        if (item.icon) {
+        if (item.icon !== undefined) {
             const icon = PIXI.Sprite.fromFrame(item.icon)
             if (setAnchor) icon.anchor.set(0.5, 0.5)
             return icon
         }
-        if (item.icons) {
+        if (item.icons !== undefined) {
             const img = new PIXI.Container()
             for (const icon of item.icons) {
                 const sprite = PIXI.Sprite.fromFrame(icon.icon)
@@ -55,253 +54,235 @@ export class InventoryContainer extends Dialog {
         }
     }
 
-    recipeVisualization: PIXI.Container
-    inventoryContents: PIXI.Container
-    itemTooltip: PIXI.Text
-    iconGutter = 36
-    inventoryActiveGroup: Button
-    inventoryGroup: Map<Button, PIXI.Container> = new Map()
-    title: PIXI.Text
+    /**
+     * Creates an icon with amount on host at coordinates
+     * @param host - PIXI.Container on top of which the icon shall be created
+     * @param x - Horizontal position of icon from top left corner
+     * @param y - Vertical position of icon from top left corner
+     * @param name - Name if item
+     * @param amount - Amount to show
+     */
+    public static createIconWithAmount(host: PIXI.Container, x: number, y: number, name: string, amount: number) {
+        const icon: PIXI.DisplayObject = InventoryContainer.createIcon(name, false)
+        icon.position.set(x, y)
+        host.addChild(icon)
+
+        const amountString: string = amount < 1000 ? amount.toString() : `${Math.floor(amount / 1000)}k`
+        const size: PIXI.TextMetrics = PIXI.TextMetrics.measureText(amountString, G.styles.icon.amount)
+        const text = new PIXI.Text(amountString, G.styles.icon.amount)
+        text.position.set(x + 33 - size.width, y + 33 - size.height)
+        host.addChild(text)
+    }
+
+    /** Container for Inventory Group Buttons */
+    private readonly m_InventoryGroups: PIXI.Container
+
+    /** Container for Inventory Group Items */
+    private readonly m_InventoryItems: PIXI.Container
+
+    /** Text for Recipe Tooltip */
+    private readonly m_RecipeLabel: PIXI.Text
+
+    /** Container for Recipe Tooltip */
+    private readonly m_RecipeContainer: PIXI.Container
 
     /**
      *
      * Cols
-     * Space @ 0+12                         ->12
-     * Items @ 12+(10*(36+2))               ->392
-     * Space @ 392+12                       ->404
-     * Width : 12 + (10 * (36 + 2)) + 12,
+     * Space   @ 0     +12              ->12
+     * Items   @ 12    +(10*(36+2))     ->392
+     * Space   @ 392   +12              ->404
+     * Width : 12 + (10 * (36 + 2)) + 12 = 404
      *
      * Rows
-     * Space   @ 0+10                       ->10
-     * Title   @ 10+24                      ->34
-     * Space   @ 34+12                      ->46
-     * Groups  @ 46+68                      ->114
-     * Space   @ 114+12                     ->126
-     * Items   @ 126+(8*(36+2))             ->430
-     * Space   @ 430+12                     ->442
-     * Tooltip @ 442+24                     ->466
-     * Space   @ 466+12                     ->478
-     * Recipe  @ 478+36                     ->514
-     * Space   @ 514+12                     ->526
-     * Height : 10 + 24 + 12 + 68 + 12 + (8 * (36 + 2)) + 12 + 24 + 12 + 36 + 12)
+     * Space   @ 0   +10                ->10
+     * Title   @ 10  +24                ->34
+     * Space   @ 34  +12                ->46
+     * Groups  @ 46  +68                ->114
+     * Space   @ 114 +12                ->126
+     * Items   @ 126 +(8*(36+2))        ->430
+     * Space   @ 430 +12                ->442
+     * Height : 10 + 24 + 12 + 68 + 12 + (8*(36+2)) + 12 = 442
+     *
+     * Space   @ 0   +10                ->10
+     * R.Label @ 10  +16                ->26
+     * Space   @ 26  +10                ->36
+     * R.Data  @ 36  +36                ->72
+     * Space   @ 8   +8                 ->78
+     * Height : 10 + 16 + 10 + 36 + 8 = 78
      */
-    constructor() {
-        super(
-            /* Width  : */ 12 + (10 * (36 + 2)) + 12,
-            /* Height : */ 10 + 24 + 12 + 68 + 12 + (8 * (36 + 2)) + 12 + 24 + 12 + 36 + 12)
+    constructor(title: string = 'Inventory', itemsFilter?: string[], selectedCallBack?: (selectedItem: string) => void) {
+        super(404, 442, Dialog.capitalize(title))
 
-        const title = new PIXI.Text('Inventory', {
-            fill: G.colors.text.normal,
-            fontFamily: G.fontFamily,
-            fontWeight: '500',
-            fontSize: 20
-        })
-        title.position.set(12, 10)
-        this.title = title
-        this.addChild(title)
+        this.on('pointerover', () => { if (G.BPC.paintContainer !== undefined) G.BPC.paintContainer.hide() })
+        this.on('pointerout',  () => { if (G.BPC.paintContainer !== undefined) G.BPC.paintContainer.show() })
 
-        this.inventoryContents = new PIXI.Container()
-        this.inventoryContents.position.set(12, 46)
-        this.addChild(this.inventoryContents)
+        this.m_InventoryGroups = new PIXI.Container()
+        this.m_InventoryGroups.position.set(12, 46)
+        this.addChild(this.m_InventoryGroups)
 
-        this.itemTooltip = new PIXI.Text('', {
-            fill: G.colors.text.normal,
-            fontFamily: G.fontFamily,
-            fontWeight: '500',
-            fontSize: 20
-        })
-        this.itemTooltip.position.set(12, 442)
-        this.addChild(this.itemTooltip)
+        this.m_InventoryItems = new PIXI.Container()
+        this.m_InventoryItems.position.set(12, 126)
+        this.addChild(this.m_InventoryItems)
 
-        this.recipeVisualization = new PIXI.Container()
-        this.recipeVisualization.position.set(28, 478 + 16)
-        this.addChild(this.recipeVisualization)
+        let groupIndex = 0
+        for (const group of FD.inventoryLayout) {
 
-        this.on('pointerover', () => { if (G.BPC.paintContainer) G.BPC.paintContainer.hide() })
-        this.on('pointerout',  () => { if (G.BPC.paintContainer) G.BPC.paintContainer.show() })
-    }
+            const inventoryGroupItems = new PIXI.Container()
+            let itemColIndex = 0
+            let itemRowIndex = 0
 
-    create(title?: string, filteredItems?: string[], cb?: (name: string) => void) {
-        this.title.text = title ? title : 'Inventory'
+            for (const subgroup of group.subgroups) {
 
-        this.itemTooltip.text = ''
-        this.recipeVisualization.visible = false
-        this.inventoryContents.removeChildren()
+                let subgroupHasItems = false
 
-        let nextI = 0
-        let groupHasItem = false
-        for (let i = 0, l = inventoryBundle.length; i < l; i++) {
-
-            const grObj = new PIXI.Container()
-            let nextK = 0
-            let nextJ = 0
-            let subgroupHasItem = false
-            for (const subgroup of inventoryBundle[i].subgroups) {
                 for (const item of subgroup.items) {
-                    const itemData = factorioData.getItem(item.name)
-                    const tileResult = itemData.place_as_tile && itemData.place_as_tile.result
-                    const placeResult = itemData.place_result || tileResult
-                    if ((!filteredItems && placeResult && (factorioData.getEntity(placeResult) || factorioData.getTile(placeResult))) ||
-                        filteredItems && filteredItems.includes(item.name)
-                    ) {
-                        const img: Button = new Button(36, 36)
-                        img.content = InventoryContainer.createIcon(item.name, false)
 
-                        if (nextK > 9) {
-                            nextJ++
-                            nextK = 0
+                    const itemData = FD.items[item.name]
+                    if (itemsFilter === undefined) {
+                        const resultPlaceable = itemData.place_result !== undefined
+                        const entityFindable = resultPlaceable ? FD.entities[itemData.place_result] !== undefined : false
+                        if (!entityFindable) {
+                            const tilePlaceable = itemData.place_as_tile !== undefined && itemData.place_as_tile.result !== undefined
+                            const tileFindable = (tilePlaceable) ? FD.tiles[itemData.place_as_tile.result] !== undefined : false
+                            if (!tileFindable) {
+                                continue
+                            }
                         }
-
-                        img.x = nextK * (this.iconGutter + 2)
-                        img.y = 80 + nextJ * (this.iconGutter + 2)
-
-                        if (filteredItems && filteredItems.includes(item.name)) {
-                            img.on('pointerdown', (e: PIXI.interaction.InteractionEvent) => {
-                                if (e.data.button === 0) {
-                                    cb(item.name)
-                                    this.visible = false
-                                }
-                            })
-                        } else {
-                            img.on('pointerdown', (e: PIXI.interaction.InteractionEvent) => {
-                                if (e.data.button === 0) {
-                                    G.BPC.spawnEntityAtMouse(item.name)
-
-                                    this.close()
-                                }
-                            })
+                    } else {
+                        if (!itemsFilter.includes(item.name)) {
+                            continue
                         }
-                        img.on('pointerover', () => {
-                            this.itemTooltip.text = item.name.split('_').map((s: any) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')
-                            this.createRecipeVisualization(item.name)
-                        })
-                        img.on('pointerout', () => {
-                            this.itemTooltip.text = ''
-                            this.recipeVisualization.visible = false
-                        })
-
-                        grObj.addChild(img)
-                        groupHasItem = true
-                        subgroupHasItem = true
-                        nextK++
                     }
+
+                    // const tileResult = itemData.place_as_tile !== undefined && itemData.place_as_tile.result !== undefined
+                    // const placeResult = itemData.place_result !== undefined || tileResult
+
+                    // if ((itemsFilter === undefined && placeResult && (itemData.place_result !== undefined ||
+                    //        itemData.place_as_tile !== undefined)) ||
+                    //    (itemsFilter !== undefined && itemsFilter.includes(item.name))) {
+
+                    if (itemColIndex === 10) {
+                        itemColIndex = 0
+                        itemRowIndex++
+                    }
+
+                    const button: Button = new Button(36, 36)
+                    button.position.set(itemColIndex * 38, itemRowIndex * 38)
+                    button.content = InventoryContainer.createIcon(item.name, false)
+                    button.on('pointerdown', (e: PIXI.interaction.InteractionEvent) => {
+                        e.stopPropagation()
+                        if (e.data.button === 0) {
+                            this.close()
+                            selectedCallBack(item.name)
+                        }
+                    })
+                    button.on('pointerover', () => this.updateRecipeVisualization(item.name))
+                    button.on('pointerout', () => this.updateRecipeVisualization(undefined))
+
+                    inventoryGroupItems.addChild(button)
+
+                    itemColIndex++
+                    subgroupHasItems = true
+                    // }
                 }
-                if (subgroupHasItem) nextJ++
-                subgroupHasItem = false
-                nextK = 0
+
+                if (subgroupHasItems) {
+                    itemRowIndex++
+                    itemColIndex = 0
+                }
             }
 
-            if (groupHasItem) {
-                const img = new Button(68, 68, 3)
-                img.content = InventoryContainer.createIcon(inventoryBundle[i].name, false)
-                img.x = nextI * 70
-                img.y = 0
-                img.on('pointerdown', (e: PIXI.interaction.InteractionEvent) => {
+            if (inventoryGroupItems.children.length > 0) {
+
+                inventoryGroupItems.visible = groupIndex === 0
+                this.m_InventoryItems.addChild(inventoryGroupItems)
+
+                const button = new Button(68, 68, 3)
+                button.active = groupIndex === 0
+                button.position.set(groupIndex * 70, 0)
+                button.content = InventoryContainer.createIcon(group.name, false)
+                button.data = inventoryGroupItems
+                button.on('pointerdown', (e: PIXI.interaction.InteractionEvent) => {
                     if (e.data.button === 0) {
-                        if (img !== this.inventoryActiveGroup) {
-                            this.inventoryGroup.get(this.inventoryActiveGroup).visible = false
-                            this.inventoryActiveGroup.active = false
-                            this.inventoryActiveGroup = img
-                            this.inventoryGroup.get(img).visible = true
-                            this.inventoryActiveGroup.active = true
+                        if (!button.active) {
+                            for (const inventoryGroup of this.m_InventoryGroups.children) {
+                                (inventoryGroup as Button).active = inventoryGroup === button
+                            }
+                        }
+                        const buttonData: PIXI.Container = button.data as PIXI.Container
+                        if (!buttonData.visible) {
+                            for (const inventoryGroupItems of this.m_InventoryItems.children) {
+                                inventoryGroupItems.visible = inventoryGroupItems === buttonData
+                                inventoryGroupItems.interactiveChildren = inventoryGroupItems === buttonData
+                            }
                         }
                     }
                 })
 
-                if (nextI === 0) {
-                    this.inventoryActiveGroup = img
-                    this.inventoryActiveGroup.active = true
-                } else {
-                    grObj.visible = false
-                }
+                this.m_InventoryGroups.addChild(button)
 
-                this.inventoryGroup.set(img, grObj)
-                this.inventoryContents.addChild(img, grObj)
-
-                nextI++
-                groupHasItem = false
+                groupIndex++
             }
         }
+
+        const recipePanel: PIXI.Container = new PIXI.Container()
+        recipePanel.position.set(0, 442)
+        this.addChild(recipePanel)
+
+        const recipeBackground: PIXI.Graphics = F.DrawRectangle(404, 78,
+            G.colors.dialog.background.color,
+            G.colors.dialog.background.alpha,
+            G.colors.dialog.background.border)
+        recipeBackground.position.set(0, 0)
+        recipePanel.addChild(recipeBackground)
+
+        this.m_RecipeLabel = new PIXI.Text('', G.styles.dialog.label)
+        this.m_RecipeLabel.position.set(12, 10)
+        recipePanel.addChild(this.m_RecipeLabel)
+
+        this.m_RecipeContainer = new PIXI.Container()
+        this.m_RecipeContainer.position.set(12, 36)
+        recipePanel.addChild(this.m_RecipeContainer)
     }
 
-    toggle(title?: string, filteredItems?: string[], cb?: (name: string) => void) {
-        if (!this.visible) {
-            if (G.editEntityContainer.active) G.editEntityContainer.visible = false
-            this.create(title, filteredItems, cb)
-            this.visible = true
-            G.openedGUIWindow = this
-
-            if (G.BPC.paintContainer && this.getBounds().contains(G.BPC.paintContainer.icon.x, G.BPC.paintContainer.icon.y)) {
-                G.BPC.paintContainer.hide()
-            }
-        } else {
-            this.close()
-        }
+    /** Override automatically set position of dialog due to additional area for recipe */
+    setPosition() {
+        this.position.set(
+            G.app.screen.width / 2 - this.width / 2,
+            G.app.screen.height / 2 - 520 / 2
+        )
     }
 
-    close() {
-        this.visible = false
-        if (G.editEntityContainer.active) {
-            G.openedGUIWindow = G.editEntityContainer
-            G.editEntityContainer.visible = true
-        } else {
-            G.openedGUIWindow = undefined
-        }
+    /** Update recipe visulaization */
+    private updateRecipeVisualization(recipeName?: string) {
 
-        if (G.BPC.paintContainer) {
-            G.BPC.paintContainer.show()
-        }
-    }
+        // Update Recipe Label
+        this.m_RecipeLabel.text = recipeName === undefined ? undefined : Dialog.capitalize(recipeName)
 
-    createRecipeVisualization(recipeName: string) {
-        const RECIPE = factorioData.getRecipe(recipeName)
-        if (!RECIPE) return
-        this.recipeVisualization.removeChildren()
+        // Update Recipe Container
+        this.m_RecipeContainer.removeChildren()
 
-        const recipe = RECIPE.normal ? RECIPE.normal : RECIPE
-        // TODO: maybe normalize the recipeBundle trough script and not here at runtime
-        const time = (recipe.energy_required !== undefined ? recipe.energy_required : RECIPE.energy_required) || 0.5
-        const ingredients = recipe.ingredients.map((o: any) => o instanceof Array ? o : [o.name, o.amount])
-        const results = recipe.result ? [[recipe.result, recipe.result_count || 1]] :
-            recipe.results.map((o: any) => [o.name, o.probability ? o.probability * o.amount : o.amount])
+        const recipe = FD.recipes[recipeName]
+        if (recipe === undefined) return
 
         let nextX = 0
-        for (const i of ingredients) {
-            const s = InventoryContainer.createIcon(i[0])
-            s.x = nextX * 36
-            this.recipeVisualization.addChild(s, createAmountText(i[1]))
-            nextX++
+        for (const ingredient of recipe.ingredients) {
+            InventoryContainer.createIconWithAmount(this.m_RecipeContainer, nextX, 0, ingredient.name, ingredient.amount)
+            nextX += 36
         }
 
-        const text = new PIXI.Text(`=${time}s>`, {
-            fill: G.colors.text.normal,
-            fontFamily: G.fontFamily,
-            fontWeight: '500',
-            fontSize: 13
-        })
-        text.anchor.set(0.5, 0.5)
-        text.x = nextX++ * 36
-        this.recipeVisualization.addChild(text)
+        nextX += 2
+        const timeText = `=${recipe.time}s>`
+        const timeSize: PIXI.TextMetrics = PIXI.TextMetrics.measureText(timeText, G.styles.dialog.label)
+        const timeObject: PIXI.Text = new PIXI.Text(timeText, G.styles.dialog.label)
+        timeObject.position.set(nextX, 6)
+        this.m_RecipeContainer.addChild(timeObject)
+        nextX += timeSize.width + 6
 
-        for (const r of results) {
-            const s = InventoryContainer.createIcon(r[0])
-            s.x = nextX * 36
-            this.recipeVisualization.addChild(s, createAmountText(r[1]))
-            nextX++
+        for (const result of recipe.results) {
+            InventoryContainer.createIconWithAmount(this.m_RecipeContainer, nextX, 0, result.name, result.amount)
+            nextX += 36
         }
-
-        function createAmountText(amount: string) {
-            const text = new PIXI.Text(amount, {
-                fill: G.colors.text.normal,
-                fontFamily: G.fontFamily,
-                fontWeight: '500',
-                fontSize: 13
-            })
-            text.anchor.set(1, 1)
-            text.position.set(nextX * 36 + 16, 16)
-            return text
-        }
-
-        this.recipeVisualization.visible = true
     }
 }

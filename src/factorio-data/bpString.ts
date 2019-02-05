@@ -1,25 +1,25 @@
 import pako from 'pako'
 import Ajv from 'ajv'
 import blueprintSchema from '../blueprintSchema.json'
-import factorioData from './factorioData'
-import { Blueprint } from './blueprint'
+import FD from 'factorio-data'
+import Blueprint from './blueprint'
 import { Book } from './book'
 
 const validate = new Ajv()
 .addKeyword('entityName', {
-    validate: (data: string) => factorioData.checkEntityName(data),
+    validate: (data: string) => !!FD.entities[data],
     errors: false,
     schema: false
 })
 .addKeyword('itemName', {
-    validate: (data: string) => factorioData.checkItemName(data),
+    validate: (data: string) => !!FD.items[data],
     errors: false,
     schema: false
 })
 .addKeyword('objectWithItemNames', {
     validate: (data: object) => {
         for (const k in data) {
-            if (!factorioData.checkItemName(k)) return false
+            if (!FD.items[k]) return false
         }
         return true
     },
@@ -27,12 +27,12 @@ const validate = new Ajv()
     schema: false
 })
 .addKeyword('recipeName', {
-    validate: (data: string) => factorioData.checkRecipeName(data),
+    validate: (data: string) => !!FD.recipes[data],
     errors: false,
     schema: false
 })
 .addKeyword('tileName', {
-    validate: (data: string) => factorioData.checkTileName(data),
+    validate: (data: string) => !!FD.tiles[data],
     errors: false,
     schema: false
 })
@@ -54,7 +54,7 @@ function decode(str: string): Promise<Blueprint | Book> {
     })
 }
 
-function encode(bPOrBook: any) {
+function encode(bPOrBook: Blueprint | Book) {
     return new Promise((resolve: (value: string) => void, reject) => {
         const data = encodeSync(bPOrBook)
         if (data.value) resolve(data.value)
@@ -62,7 +62,7 @@ function encode(bPOrBook: any) {
     })
 }
 
-function encodeSync(bPOrBook: any): { value?: string; error?: string } {
+function encodeSync(bPOrBook: Blueprint | Book): { value?: string; error?: string } {
     try {
         return { value: '0' + btoa(pako.deflate(
             JSON.stringify(bPOrBook.toObject())

@@ -2,7 +2,7 @@ import G from '../common/globals'
 import { EntityContainer } from './entity'
 import { AdjustmentFilter } from '@pixi/filter-adjustment'
 import { TileContainer } from './tile'
-import factorioData from '../factorio-data/factorioData'
+import FD from 'factorio-data'
 import { InventoryContainer } from '../panels/inventory'
 
 export class TilePaintContainer extends PIXI.Container {
@@ -81,7 +81,7 @@ export class TilePaintContainer extends PIXI.Container {
     }
 
     getItemName() {
-        return factorioData.getTile(this.name).minable.result
+        return FD.tiles[this.name].minable.result
     }
 
     increaseSize() {
@@ -145,28 +145,17 @@ export class TilePaintContainer extends PIXI.Container {
     removeContainerUnder() {
         const position = EntityContainer.getGridPosition(this.position)
 
-        TilePaintContainer.getTilePositions()
-            .map(p => ({ x: p.x + position.x, y: p.y + position.y }))
-            .forEach(p => {
-                const tileUnder = TileContainer.mappings.get(`${p.x},${p.y}`)
-                if (tileUnder) {
-                    tileUnder.destroy()
-                    G.bp.removeTile(p)
-                }
-            })
+        G.bp.removeTiles(
+            TilePaintContainer.getTilePositions().map(p => ({ x: p.x + position.x, y: p.y + position.y }))
+        )
     }
 
     placeEntityContainer() {
         const position = EntityContainer.getGridPosition(this.position)
 
-        TilePaintContainer.getTilePositions()
-            .map(p => ({ x: p.x + position.x, y: p.y + position.y }))
-            .forEach(p => {
-                const tileUnder = TileContainer.mappings.get(`${p.x},${p.y}`)
-                if (tileUnder) tileUnder.destroy()
-
-                G.bp.createTile(this.name, p)
-                G.BPC.tiles.addChild(new TileContainer(this.name, p))
-            })
+        G.bp.createTiles(
+            this.name,
+            TilePaintContainer.getTilePositions().map(p => ({ x: p.x + position.x, y: p.y + position.y }))
+        )
     }
 }
