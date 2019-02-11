@@ -150,6 +150,9 @@ function loadBp(bp: string, clearData = true) {
 
             if (clearData) G.BPC.clearData()
             G.BPC.initBP()
+
+            Dialog.closeAll()
+
             console.log('Loaded BP String')
         })
         .catch(error => console.error(error))
@@ -229,8 +232,7 @@ actions.showInfo.bind(() => {
 })
 
 actions.info.bind(() => {
-    Dialog.closeAll()
-    new InfoContainer().show()
+    InfoContainer.toggle()
 })
 
 actions.closeWindow.bind(() => {
@@ -267,7 +269,7 @@ actions.reverseRotate.bind(() => {
     }
 })
 
-actions.pippete.bind(() => {
+actions.pipette.bind(() => {
     if (G.BPC.hoverContainer && G.currentMouseState === G.mouseStates.NONE) {
         G.currentMouseState = G.mouseStates.PAINTING
 
