@@ -54,12 +54,14 @@ export default class Entity extends EventEmitter {
 
     /** Entity Type */
     get type(): string {
-        return FD.entities[this.name].type
+        if(FD.entities[this.name]) return FD.entities[this.name].type
+        if(FD.treesAndRocks[this.name]) return FD.treesAndRocks[this.name].type
     }
 
     /** Direct access to entity meta data from factorio-data */
     get entityData(): FD.Entity {
-        return FD.entities[this.name]
+        if(FD.entities[this.name]) return FD.entities[this.name]
+        if(FD.treesAndRocks[this.name]) return FD.treesAndRocks[this.name]
     }
 
     /** Direct access to recipe meta data from factorio-data */

@@ -10,6 +10,8 @@ import utilitySpritesheetPNG from 'factorio-data/data/graphics/utilitySpriteshee
 import utilitySpritesheetJSON from 'factorio-data/data/graphics/utilitySpritesheet.json'
 import tilesSpritesheetPNG from 'factorio-data/data/graphics/tileSpritesheet.png'
 import tilesSpritesheetJSON from 'factorio-data/data/graphics/tileSpritesheet.json'
+import LRTreesAndRocksSpritesheetPNG from 'factorio-data/data/graphics/LRTreesAndRocksSpritesheet.png'
+import LRTreesAndRocksSpritesheetJSON from 'factorio-data/data/graphics/LRTreesAndRocksSpritesheet.json'
 import * as PIXI from 'pixi.js'
 
 import G from './common/globals'
@@ -30,6 +32,7 @@ function getAllPromises() {
             G.quality.hr ? HRentitySpritesheetJSON : LRentitySpritesheetJSON
         ],
         [iconSpritesheetPNG, iconSpritesheetJSON],
+        [LRTreesAndRocksSpritesheetPNG, LRTreesAndRocksSpritesheetJSON],
         [utilitySpritesheetPNG, utilitySpritesheetJSON],
         [tilesSpritesheetPNG, tilesSpritesheetJSON]
     ].map(data => loadSpritesheet(data[0], data[1]))

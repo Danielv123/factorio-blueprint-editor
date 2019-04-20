@@ -59,6 +59,15 @@ for (const e in FD.entities) {
         entityToFunction.set(entity.name, generator)
     }
 }
+for (const tar in FD.treesAndRocks) {
+    if (FD.treesAndRocks.hasOwnProperty(tar) && FD.treesAndRocks[tar].type == 'tree') {
+        const entity = FD.treesAndRocks[tar]
+        const generator = (data: IDrawData) => {
+            const spriteData = [...generateGraphics(entity)(data)]
+        }
+        entityToFunction.set(entity.name, generator)
+    }
+}
 
 function getPipeCovers(e: FD.Entity) {
     if (e.fluid_box && e.output_fluid_box) {
@@ -1310,6 +1319,11 @@ function generateGraphics(e: FD.Entity): (data: IDrawData) => FD.SpriteData[] {
     }
 
     switch (e.type) {
+        case 'tree':
+            return () => [
+                ([e.variations[0].trunk] as FD.SpriteLayers).layers[0],
+                ([e.variations[0].leaves] as FD.SpriteLayers).layers[0]
+            ]
         case 'furnace':
         case 'logistic_container':
             return () => [(e.animation as FD.SpriteLayers).layers[0]]
