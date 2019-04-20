@@ -1,10 +1,11 @@
+import * as PIXI from 'pixi.js'
 import Slot from '../../controls/slot'
 import { InventoryContainer } from '../../panels/inventory'
 import Entity from '../../factorio-data/entity'
+import F from '../../controls/functions'
 
 /** Module Slots for Entity */
-export default class Modules extends  PIXI.Container {
-
+export default class Modules extends PIXI.Container {
     /** Blueprint Editor Entity reference */
     private readonly m_Entity: Entity
 
@@ -22,7 +23,8 @@ export default class Modules extends  PIXI.Container {
         const modules = this.m_Entity.modules
         if (modules !== undefined) {
             for (let slotIndex = 0; slotIndex < this.m_Modules.length; slotIndex++) {
-                this.m_Modules[slotIndex] = modules.length > slotIndex && modules[slotIndex] !== undefined ? modules[slotIndex] : undefined
+                this.m_Modules[slotIndex] =
+                    modules.length > slotIndex && modules[slotIndex] !== undefined ? modules[slotIndex] : undefined
             }
         }
 
@@ -33,17 +35,19 @@ export default class Modules extends  PIXI.Container {
             slot.data = slotIndex
             slot.on('pointerdown', (e: PIXI.interaction.InteractionEvent) => this.onSlotPointerDown(e))
             if (this.m_Modules[slotIndex] !== undefined) {
-                slot.content = InventoryContainer.createIcon(this.m_Modules[slotIndex], false)
+                slot.content = F.CreateIcon(this.m_Modules[slotIndex], false)
             }
             this.addChild(slot)
         }
 
         this.m_Entity.on('modules', modules =>
-            [...modules, ...Array(this.m_Entity.moduleSlots - modules.length).fill(undefined)]
-                .forEach((m: string, i: number) => {
+            [...modules, ...Array(this.m_Entity.moduleSlots - modules.length).fill(undefined)].forEach(
+                (m: string, i: number) => {
                     this.m_Modules[i] = m
                     this.updateContent(this.getChildAt(i) as Slot, m)
-                }))
+                }
+            )
+        )
     }
 
     /** Update Content Icon */
@@ -53,7 +57,7 @@ export default class Modules extends  PIXI.Container {
                 slot.content = undefined
             }
         } else {
-            slot.content = InventoryContainer.createIcon(module, false)
+            slot.content = F.CreateIcon(module, false)
         }
         this.emit('changed')
     }
@@ -67,8 +71,7 @@ export default class Modules extends  PIXI.Container {
             new InventoryContainer('Select Module', this.m_Entity.acceptedModules, name => {
                 this.m_Modules[index] = name
                 this.m_Entity.modules = this.m_Modules
-            })
-            .show()
+            }).show()
         } else if (e.data.button === 2) {
             this.m_Modules[index] = undefined
             this.m_Entity.modules = this.m_Modules

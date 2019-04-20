@@ -1,4 +1,5 @@
 import { AdjustmentFilter } from '@pixi/filter-adjustment'
+import * as PIXI from 'pixi.js'
 import spriteDataBuilder from './factorio-data/spriteDataBuilder'
 import Entity from './factorio-data/entity'
 import G from './common/globals'
@@ -8,35 +9,39 @@ interface IEntityData {
     type?: string
     direction?: number
     position?: IPoint
-    hasConnections?: boolean
+    generateConnector?: boolean
     directionType?: string
     operator?: string
     assemblerCraftsWithFluid?: boolean
     assemblerPipeDirection?: string
     trainStopColor?: {
-        r: number;
-        g: number;
-        b: number;
-        a: number;
+        r: number
+        g: number
+        b: number
+        a: number
     }
     chemicalPlantDontConnectOutput?: boolean
 }
 
 export class EntitySprite extends PIXI.Sprite {
     static nextID = 0
+    static getNextID() {
+        this.nextID += 1
+        return this.nextID
+    }
 
-    static getParts(entity: IEntityData | Entity, hr: boolean, ignore_connections?: boolean): EntitySprite[] {
-
+    static getParts(entity: IEntityData | Entity, hr: boolean, ignoreConnections?: boolean): EntitySprite[] {
         const anims = spriteDataBuilder.getSpriteData({
             hr,
-            dir: !ignore_connections && entity.type === 'electric_pole' && entity instanceof Entity
-                ? G.BPC.wiresContainer.getPowerPoleDirection(entity)
-                : entity.direction,
+            dir:
+                !ignoreConnections && entity.type === 'electric_pole' && entity instanceof Entity
+                    ? G.BPC.wiresContainer.getPowerPoleDirection(entity)
+                    : entity.direction,
 
             name: entity.name,
-            bp: ignore_connections ? undefined : G.bp,
+            bp: ignoreConnections ? undefined : G.bp,
             position: entity.position,
-            hasConnections: entity.hasConnections,
+            generateConnector: entity.generateConnector,
 
             dirType: entity.directionType,
             operator: entity.operator,
@@ -46,13 +51,11 @@ export class EntitySprite extends PIXI.Sprite {
             chemicalPlantDontConnectOutput: entity.chemicalPlantDontConnectOutput
         })
 
-        // const icon = new PIXI.Sprite(G.iconSprites['icon:' + FD.entities[entity.name].icon.split(':')[1]])
-        // icon.x -= 16
-        // icon.y -= 16
-        // return [icon]
-
+        // TODO: maybe move the zIndex logic to spriteDataBuilder
         const parts: EntitySprite[] = []
-        for (let i = 0, l = anims.length; i < l; i++) {
+
+        let foundMainBelt = false
+        for (let i = 0; i < anims.length; i++) {
             const img = new EntitySprite(anims[i])
             if (anims[i].filename.includes('circuit-connector')) {
                 img.zIndex = 1
@@ -70,6 +73,15 @@ export class EntitySprite extends PIXI.Sprite {
                 }
             } else if (entity.type === 'transport_belt' || entity.name === 'heat_pipe') {
                 img.zIndex = i === 0 ? -6 : -5
+
+                if (anims[i].filename.includes('connector') && !anims[i].filename.includes('back-patch')) {
+                    img.zIndex = 0
+                }
+            } else if (entity.type === 'splitter' || entity.type === 'underground_belt' || entity.type === 'loader') {
+                if (!foundMainBelt && anims[i].filename.includes('transport-belt')) {
+                    foundMainBelt = true
+                    img.zIndex = -6
+                }
             } else {
                 img.zIndex = 0
             }
@@ -85,30 +97,43 @@ export class EntitySprite extends PIXI.Sprite {
     shift: IPoint
     zIndex: number
     zOrder: number
+    cachedBounds: number[]
 
     constructor(data: ISpriteData) {
-        if (!data.shift) data.shift = [0, 0]
-        if (!data.x) data.x = 0
-        if (!data.y) data.y = 0
-        if (!data.divW) data.divW = 1
-        if (!data.divH) data.divH = 1
+        if (!data.shift) {
+            data.shift = [0, 0]
+        }
+        if (!data.x) {
+            data.x = 0
+        }
+        if (!data.y) {
+            data.y = 0
+        }
+        if (!data.divW) {
+            data.divW = 1
+        }
+        if (!data.divH) {
+            data.divH = 1
+        }
 
         const textureKey = `${data.filename}-${data.x}-${data.y}-${data.width / data.divW}-${data.height / data.divH}`
         let texture = PIXI.utils.TextureCache[textureKey]
         if (!texture) {
-            const spriteData = PIXI.Texture.fromFrame(data.filename)
-            texture = new PIXI.Texture(spriteData.baseTexture, new PIXI.Rectangle(
-                spriteData.frame.x + data.x,
-                spriteData.frame.y + data.y,
-                data.width / data.divW,
-                data.height / data.divH
-            ))
+            const spriteData = PIXI.Texture.from(data.filename)
+            texture = new PIXI.Texture(
+                spriteData.baseTexture,
+                new PIXI.Rectangle(
+                    spriteData.frame.x + data.x,
+                    spriteData.frame.y + data.y,
+                    data.width / data.divW,
+                    data.height / data.divH
+                )
+            )
             PIXI.Texture.addToCache(texture, textureKey)
         }
         super(texture)
 
-        this.interactive = false
-        this.id = EntitySprite.nextID++
+        this.id = EntitySprite.getNextID()
 
         this.shift = {
             x: data.shift[0] * 32,
@@ -117,35 +142,70 @@ export class EntitySprite extends PIXI.Sprite {
 
         this.position.set(this.shift.x, this.shift.y)
 
-        if (data.scale) this.scale.set(data.scale, data.scale)
-        this.anchor.set(0.5, 0.5)
-
-        if (data.flipX) this.scale.x *= -1
-        if (data.flipY) this.scale.y *= -1
-
-        if (data.height_divider) this.height /= data.height_divider
-
-        if (data.rot) this.rotation = data.rot * Math.PI * 0.5
-
-        if (data.color) {
-            this.filters = [new AdjustmentFilter({
-                gamma: 1.4,
-                contrast: 1.4,
-                brightness: 1.2,
-                red: data.color.r,
-                green: data.color.g,
-                blue: data.color.b,
-                alpha: data.color.a
-            })]
+        if (data.scale) {
+            this.scale.set(data.scale, data.scale)
         }
+
+        this.anchor.x = data.anchorX === undefined ? 0.5 : data.anchorX
+        this.anchor.y = data.anchorY === undefined ? 0.5 : data.anchorY
+
+        if (data.squishY) {
+            this.height /= data.squishY
+        }
+
+        if (data.rotAngle) {
+            this.angle = data.rotAngle
+        }
+
+        if (data.tint) {
+            this.filters = [
+                new AdjustmentFilter({
+                    gamma: 1.4,
+                    contrast: 1.4,
+                    brightness: 1.2,
+                    red: data.tint.r || 1,
+                    green: data.tint.g || 1,
+                    blue: data.tint.b || 1,
+                    alpha: data.tint.a || 1
+                })
+            ]
+        }
+
+        // CACHE LOCAL BOUNDS
+        let minX = this.texture.orig.width * -this.anchor.x * data.scale
+        let minY = this.texture.orig.height * -this.anchor.y * data.scale
+        let maxX = this.texture.orig.width * (1 - this.anchor.x) * data.scale
+        let maxY = this.texture.orig.height * (1 - this.anchor.y) * data.scale
+
+        if (this.rotation !== 0) {
+            const sin = Math.sin(this.rotation)
+            const cos = Math.cos(this.rotation)
+            // 01
+            // 23
+            const x0 = minX * cos - minY * sin
+            const y0 = minX * sin + minY * cos
+
+            const x1 = maxX * cos - minY * sin
+            const y1 = maxX * sin + minY * cos
+
+            const x2 = minX * cos - maxY * sin
+            const y2 = minX * sin + maxY * cos
+
+            const x3 = maxX * cos - maxY * sin
+            const y3 = maxX * sin + maxY * cos
+
+            minX = Math.min(x0, x1, x2, x3)
+            minY = Math.min(y0, y1, y2, y3)
+            maxX = Math.max(x0, x1, x2, x3)
+            maxY = Math.max(y0, y1, y2, y3)
+        }
+
+        this.cachedBounds = [minX, minY, maxX, maxY]
 
         return this
     }
 
-    setPosition(position: PIXI.Point | PIXI.ObservablePoint) {
-        this.position.set(
-            position.x + this.shift.x,
-            position.y + this.shift.y
-        )
+    setPosition(position: IPoint) {
+        this.position.set(position.x + this.shift.x, position.y + this.shift.y)
     }
 }

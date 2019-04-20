@@ -8,10 +8,6 @@ declare module '*.json' {
     export default content
 }
 
-interface NodeModule {
-    hot: any
-}
-
 interface Navigator {
     clipboard: {
         writeText?: (s: string) => Promise<void>
@@ -49,10 +45,10 @@ interface IFilter {
 
 interface IConnection {
     color: string
-    entity_number_1: number
-    entity_number_2: number
-    entity_side_1: number
-    entity_side_2: number
+    entityNumber1: number
+    entityNumber2: number
+    entitySide1: number
+    entitySide2: number
 }
 
 interface ISpriteData {
@@ -81,30 +77,23 @@ interface ISpriteData {
     // apply_projection?: boolean
     // flags?: string[]
     // counterclockwise?: boolean
-    // tint?: {
-    //     r: number;
-    //     g: number;
-    //     b: number;
-    //     a: number;
-    // }
+    tint?: {
+        r: number
+        g: number
+        b: number
+        a: number
+    }
     // lines_per_file?: number
 
-    divW: number
-    divH: number
-    flipX: boolean
-    flipY: boolean
-    height_divider: number
-    rot: number
-    color: {
-        r: number;
-        g: number;
-        b: number;
-        a: number;
-    }
+    anchorX?: number
+    anchorY?: number
+    divW?: number
+    divH?: number
+    squishY?: number
+    rotAngle?: number
 }
 
 /** Namespace for blueprint string interfaces */
-// tslint:disable-next-line:no-namespace
 namespace BPS {
     interface ISignal {
         name: string
@@ -126,7 +115,7 @@ namespace BPS {
         [key: string]: IWireColor[]
     }
 
-    export interface IEntity {
+    interface IEntity {
         entity_number: number
         name: string
         position: IPoint
@@ -165,17 +154,17 @@ namespace BPS {
         override_stack_size?: number
         /** only present if entity is logistic-chest-requester */
         request_from_buffers?: boolean
-        /** only present if entity is filter-inserter or stack-filter-inserter */
-        filters?: Array<{
+        /** only present if entity is filter-inserter, stack-filter-inserter or of type loader */
+        filters?: {
             index: number
             name: string
-        }>
+        }[]
         /** only present if entity is logistic-chest-storage, logistic-chest-buffer or logistic-chest-requester */
-        request_filters?: Array<{
+        request_filters?: {
             index: number
             name: string
             count: number
-        }>
+        }[]
 
         /** only present if entity is programmable-speaker */
         alert_parameters?: {
@@ -191,6 +180,28 @@ namespace BPS {
             allow_polyphony?: boolean
         }
 
+        /** only present if entity is infinity_chest or infinity_pipe */
+        infinity_settings?: {
+            /** only present if entity is infinity_pipe */
+            name?: string
+            /** only present if entity is infinity_pipe */
+            mode?: 'at_least' | 'at_most' | 'exactly'
+            /** only present if entity is infinity_pipe */
+            percentage?: number
+            /** only present if entity is infinity_pipe */
+            temperature?: number
+
+            /** only present if entity is infinity_chest */
+            filters?: {
+                name: string
+                mode: 'at_least' | 'at_most' | 'exactly'
+                index: number
+                count: number
+            }[]
+            /** only present if entity is infinity_chest */
+            remove_unfiltered_items?: boolean
+        }
+
         /** wire connections */
         connections?: {
             1: IConnSide
@@ -204,11 +215,11 @@ namespace BPS {
             /** only present if entity is constant-combinator */
             is_on?: boolean
             /** only present if entity is constant-combinator */
-            filters?: Array<{
+            filters?: {
                 index: number
                 count: number
                 signal: ISignal
-            }>
+            }[]
 
             /** only present if entity is small-lamp */
             use_colors?: boolean
@@ -321,29 +332,32 @@ namespace BPS {
         }
     }
 
-    export interface ITile {
+    interface ITile {
         name: string
         position: IPoint
     }
 
-    export interface IBlueprint {
+    interface IBlueprint {
         version: number
         item: 'blueprint'
-        icons: Array<{
+        icons: {
             index: 1 | 2 | 3 | 4
             signal: ISignal
-        }>
+        }[]
 
         label?: string
         entities?: IEntity[]
         tiles?: ITile[]
     }
 
-    export interface IBlueprintBook {
+    interface IBlueprintBook {
         version: number
         item: 'blueprint_book'
         active_index: number
-        blueprints: IBlueprint[]
+        blueprints: {
+            blueprint: IBlueprint
+            index: number
+        }[]
 
         label?: string
     }

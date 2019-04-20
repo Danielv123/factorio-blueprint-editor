@@ -1,11 +1,15 @@
 import * as PIXI from 'pixi.js'
 
-export class Viewport {
+interface ISize {
+    width: number
+    height: number
+}
 
+export class Viewport {
     private container: PIXI.Container
-    private size: any
-    private viewPortPosition: any
-    private viewPortSize: any
+    private size: ISize
+    private viewPortPosition: IPoint
+    private viewPortSize: ISize
     private maxZoom: number
     private dirty: boolean
     private positionX: number
@@ -17,7 +21,13 @@ export class Viewport {
     private origTransform: PIXI.Matrix
     private transform: PIXI.Matrix
 
-    constructor(container: PIXI.Container, size: any, viewPortPosition: any, viewPortSize: any, maxZoom: number) {
+    constructor(
+        container: PIXI.Container,
+        size: ISize,
+        viewPortPosition: IPoint,
+        viewPortSize: ISize,
+        maxZoom: number
+    ) {
         this.container = container
 
         this.size = size
@@ -85,10 +95,11 @@ export class Viewport {
             this.scaleCenterX = this.size.width / 2
             this.scaleCenterY = this.size.height / 2
 
-            const maxZoom = Math.max(
-                this.viewPortSize.width / (this.size.width * this.transform.a),
-                this.viewPortSize.height / (this.size.height * this.transform.a)
-            ) * this.transform.a
+            const maxZoom =
+                Math.max(
+                    this.viewPortSize.width / (this.size.width * this.transform.a),
+                    this.viewPortSize.height / (this.size.height * this.transform.a)
+                ) * this.transform.a
             this.scaleX = maxZoom
             this.scaleY = maxZoom
 
@@ -97,10 +108,18 @@ export class Viewport {
             return
         }
 
-        if (this.positionX > minX) this.positionX = minX
-        if (this.positionY > minY) this.positionY = minY
-        if (this.positionX < maxX) this.positionX = maxX
-        if (this.positionY < maxY) this.positionY = maxY
+        if (this.positionX > minX) {
+            this.positionX = minX
+        }
+        if (this.positionY > minY) {
+            this.positionY = minY
+        }
+        if (this.positionX < maxX) {
+            this.positionX = maxX
+        }
+        if (this.positionY < maxY) {
+            this.positionY = maxY
+        }
 
         this.transform.translate(this.positionX, this.positionY)
     }
@@ -108,10 +127,16 @@ export class Viewport {
     centerViewPort(focusObjectSize: IPoint, offset: IPoint) {
         this.origTransform = new PIXI.Matrix()
 
-        this.positionX = this.viewPortPosition.x - (this.size.width / 2) +
-            (this.viewPortSize.width - this.viewPortPosition.x) / 2 + offset.x
-        this.positionY = this.viewPortPosition.y - (this.size.height / 2) +
-            (this.viewPortSize.height - this.viewPortPosition.y) / 2 + offset.y
+        this.positionX =
+            this.viewPortPosition.x -
+            this.size.width / 2 +
+            (this.viewPortSize.width - this.viewPortPosition.x) / 2 +
+            offset.x
+        this.positionY =
+            this.viewPortPosition.y -
+            this.size.height / 2 +
+            (this.viewPortSize.height - this.viewPortPosition.y) / 2 +
+            offset.y
 
         this.scaleCenterX = this.size.width / 2 + -offset.x
         this.scaleCenterY = this.size.height / 2 + -offset.y
@@ -156,10 +181,12 @@ export class Viewport {
         return this.positionY
     }
 
-    zoomBy(deltaX: number, deltaY: number) {
-        if (Math.sign(deltaX) === 1 && this.origTransform.a > this.maxZoom) return
+    zoomBy(deltaX: number, deltaY?: number) {
+        if (Math.sign(deltaX) === 1 && this.origTransform.a > this.maxZoom) {
+            return
+        }
         this.scaleX += deltaX
-        this.scaleY += deltaY
+        this.scaleY += deltaY === undefined ? deltaX : deltaY
         this.dirty = true
     }
 

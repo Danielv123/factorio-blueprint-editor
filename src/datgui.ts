@@ -1,6 +1,7 @@
+import * as dat from 'dat.gui'
+import FD from 'factorio-data'
 import actions from './actions'
 import G from './common/globals'
-import * as dat from 'dat.gui'
 import { QuickbarContainer } from './panels/quickbar'
 import spritesheetsLoader from './spritesheetsLoader'
 
@@ -10,7 +11,14 @@ export default function initDatGui() {
         hideable: false,
         closeOnTop: true,
         closed: localStorage.getItem('dat.gui.closed') === 'true',
-        width: 300
+        width: 320
+    })
+
+    gui.domElement.style.overflowX = 'hidden'
+    gui.domElement.style.overflowY = 'auto'
+    gui.domElement.style.maxHeight = `${window.innerHeight}px`
+    window.addEventListener('resize', () => {
+        gui.domElement.style.maxHeight = `${window.innerHeight}px`
     })
 
     window.addEventListener('unload', () => localStorage.setItem('dat.gui.closed', String(gui.closed)))
@@ -28,24 +36,17 @@ export default function initDatGui() {
             }
         })
 
-    if (localStorage.getItem('hr')) G.hr = localStorage.getItem('hr') === 'true'
-    gui
-        .add(G, 'hr')
-        .name('HR Entities')
-        .onChange((val: boolean) => {
-            localStorage.setItem('hr', val.toString())
-            spritesheetsLoader.changeQuality(G.hr)
-        })
-
-    if (localStorage.getItem('moveSpeed')) G.moveSpeed = Number(localStorage.getItem('moveSpeed'))
-    gui
-        .add(G, 'moveSpeed', 5, 20)
+    if (localStorage.getItem('moveSpeed')) {
+        G.moveSpeed = Number(localStorage.getItem('moveSpeed'))
+    }
+    gui.add(G, 'moveSpeed', 5, 20)
         .name('Move Speed')
         .onChange((val: boolean) => localStorage.setItem('moveSpeed', val.toString()))
 
-    if (localStorage.getItem('quickbarRows')) G.quickbarRows = Number(localStorage.getItem('quickbarRows'))
-    gui
-        .add(G, 'quickbarRows', 1, 5, 1)
+    if (localStorage.getItem('quickbarRows')) {
+        G.quickbarRows = Number(localStorage.getItem('quickbarRows'))
+    }
+    gui.add(G, 'quickbarRows', 1, 5, 1)
         .name('Quickbar Rows')
         .onChange((val: number) => {
             localStorage.setItem('quickbarRows', val.toString())
@@ -61,16 +62,51 @@ export default function initDatGui() {
         localStorage.setItem('quickbarItemNames', JSON.stringify(G.quickbarContainer.getAllItemNames()))
     })
 
+    const entitiesQuality = {
+        'Low. Res PNG 8 (1.52 MB)': 0,
+        'High Res PNG 8 (5.52 MB)': 1,
+        'Low. Res PNG 32 (5.55 MB)': 2,
+        'High Res PNG 32 (18.20 MB)': 3
+    }
+    const setQuality = (quality: number) => {
+        G.quality.hr = quality % 2 === 1
+        G.quality.compressed = quality < 2
+    }
+
+    const gl = document.createElement('canvas').getContext('webgl')
+    if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < 8192) {
+        delete entitiesQuality['High Res PNG 8 (5.52 MB)']
+        delete entitiesQuality['High Res PNG 32 (18.20 MB)']
+        G.quality.hr = false
+    }
+
+    const quality = localStorage.getItem('quality')
+        ? Number(localStorage.getItem('quality'))
+        : (G.quality.hr ? 1 : 0) + (G.quality.compressed ? 0 : 2)
+    setQuality(quality)
+
+    gui.add({ quality }, 'quality', entitiesQuality)
+        .name('Entities Quality')
+        .onChange((quality: number) => {
+            localStorage.setItem('quality', quality.toString())
+            setQuality(quality)
+            spritesheetsLoader.changeQuality(G.quality.hr, G.quality.compressed)
+        })
+
     // Theme folder
     const themeFolder = gui.addFolder('Theme')
 
-    if (localStorage.getItem('darkTheme')) G.colors.darkTheme = localStorage.getItem('darkTheme') === 'true'
+    if (localStorage.getItem('darkTheme')) {
+        G.colors.darkTheme = localStorage.getItem('darkTheme') === 'true'
+    }
     themeFolder
         .add(G.colors, 'darkTheme')
         .name('Dark Mode')
         .onChange((val: boolean) => localStorage.setItem('darkTheme', val.toString()))
 
-    if (localStorage.getItem('pattern')) G.colors.pattern = localStorage.getItem('pattern')
+    if (localStorage.getItem('pattern')) {
+        G.colors.pattern = localStorage.getItem('pattern') as 'checker' | 'grid'
+    }
     themeFolder
         .add(G.colors, 'pattern', ['grass', 'checker', 'grid'])
         .name('Pattern')
@@ -79,42 +115,56 @@ export default function initDatGui() {
             localStorage.setItem('pattern', val)
         })
 
+    if (localStorage.getItem('oilOutpostSettings')) {
+        G.oilOutpostSettings = JSON.parse(localStorage.getItem('oilOutpostSettings'))
+    }
+    window.addEventListener('unload', () =>
+        localStorage.setItem('oilOutpostSettings', JSON.stringify(G.oilOutpostSettings))
+    )
+
     const oilOutpostFolder = gui.addFolder('Oil Outpost Generator Settings')
-    oilOutpostFolder
-        .add(G.oilOutpostSettings, 'DEBUG')
-        .name('Debug')
-    oilOutpostFolder
-        .add(G.oilOutpostSettings, 'PUMPJACK_MODULE', [
-            'speed_module_3', 'speed_module_2', 'speed_module',
-            'productivity_module_3', 'productivity_module_2', 'productivity_module',
-            'effectivity_module_3', 'effectivity_module_2', 'effectivity_module'
-        ])
-        .name('Pumpjack Modules')
-    oilOutpostFolder
-        .add(G.oilOutpostSettings, 'MIN_GAP_BETWEEN_UNDERGROUNDS', 1, 9, 1)
-        .name('Min Gap > < UPipes')
-    oilOutpostFolder
-        .add(G.oilOutpostSettings, 'BEACONS')
-        .name('Beacons')
-    oilOutpostFolder
-        .add(G.oilOutpostSettings, 'MIN_AFFECTED_ENTITIES', 1, 12, 1)
-        .name('Min Affect. Pumpjacks')
-    oilOutpostFolder
-        .add(G.oilOutpostSettings, 'BEACON_MODULE', [
-            'speed_module_3', 'speed_module_2', 'speed_module',
-            'effectivity_module_3', 'effectivity_module_2', 'effectivity_module'
-        ])
-        .name('Beacon Modules')
-    oilOutpostFolder
-        .add(actions.generateOilOutpost, 'call')
-        .name('Generate (g)')
+    oilOutpostFolder.add(G.oilOutpostSettings, 'DEBUG').name('Debug')
+    oilOutpostFolder.add(G.oilOutpostSettings, 'PUMPJACK_MODULE', getModulesObjFor('pumpjack')).name('Pumpjack Modules')
+    oilOutpostFolder.add(G.oilOutpostSettings, 'MIN_GAP_BETWEEN_UNDERGROUNDS', 1, 9, 1).name('Min Gap > < UPipes')
+    oilOutpostFolder.add(G.oilOutpostSettings, 'BEACONS').name('Beacons')
+    oilOutpostFolder.add(G.oilOutpostSettings, 'MIN_AFFECTED_ENTITIES', 1, 12, 1).name('Min Affect. Pumpjacks')
+    oilOutpostFolder.add(G.oilOutpostSettings, 'BEACON_MODULE', getModulesObjFor('beacon')).name('Beacon Modules')
+    oilOutpostFolder.add(actions.generateOilOutpost, 'call').name('Generate (g)')
+
+    function getModulesObjFor(entityName: string) {
+        return (
+            Object.keys(FD.items)
+                .map(k => FD.items[k])
+                .filter(item => item.type === 'module')
+                // filter modules based on entity allowed_effects (ex: beacons don't accept productivity effect)
+                .filter(
+                    item =>
+                        !FD.entities[entityName].allowed_effects ||
+                        Object.keys(item.effect).every(effect =>
+                            FD.entities[entityName].allowed_effects.includes(effect)
+                        )
+                )
+                .reduce(
+                    (obj, item) => {
+                        obj[item.ui_name] = item.name
+                        return obj
+                    },
+                    { None: 'none' } as { [key: string]: string }
+                )
+        )
+    }
 
     // Keybinds folder
     const keybindsFolder = gui.addFolder('Keybinds')
 
     actions.forEachAction((action, actionName) => {
-        const name = actionName.split(/(?=[A-Z1-9])/).join(' ').replace(/(\b\w)/, c => c.toUpperCase())
-        if (name.includes('Quickbar')) return
+        const name = actionName
+            .split(/(?=[A-Z1-9])/)
+            .join(' ')
+            .replace(/(\b\w)/, c => c.toUpperCase())
+        if (name.includes('Quickbar')) {
+            return
+        }
         keybindsFolder
             .add(action, 'keyCombo')
             .name(name)
@@ -124,8 +174,13 @@ export default function initDatGui() {
     const quickbarFolder = keybindsFolder.addFolder('Quickbar')
 
     actions.forEachAction((action, actionName) => {
-        const name = actionName.split(/(?=[A-Z1-9])/).join(' ').replace(/(\b\w)/, c => c.toUpperCase())
-        if (!name.includes('Quickbar')) return
+        const name = actionName
+            .split(/(?=[A-Z1-9])/)
+            .join(' ')
+            .replace(/(\b\w)/, c => c.toUpperCase())
+        if (!name.includes('Quickbar')) {
+            return
+        }
         quickbarFolder
             .add(action, 'keyCombo')
             .name(name)
@@ -133,15 +188,13 @@ export default function initDatGui() {
     })
 
     keybindsFolder
-        .add({
-            resetDefaults: () => actions.forEachAction(action => action.resetKeyCombo())
-        }, 'resetDefaults')
+        .add(
+            {
+                resetDefaults: () => actions.forEachAction(action => action.resetKeyCombo())
+            },
+            'resetDefaults'
+        )
         .name('Reset Defaults')
-
-    // Disables the controls inside inputs
-    for (const el of gui.domElement.getElementsByTagName('input')) {
-        actions.disableOnElementFocus(el)
-    }
 
     return {
         guiBPIndex
