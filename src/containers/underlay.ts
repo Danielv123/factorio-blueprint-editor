@@ -7,6 +7,9 @@ type Type = 'logistics0' | 'logistics1' | 'poles' | 'beacons' | 'drills'
 export class UnderlayContainer extends PIXI.Container {
     static getDataForVisualizationArea(name: string) {
         const ed = FD.entities[name]
+        if (!ed) {
+            return
+        }
         function undoBlendModeColorShift(color0: number, color1: number, alpha: number) {
             // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/blendFunc
             // array[BLEND_MODES.NORMAL] = [gl.ONE, gl.ONE_MINUS_SRC_ALPHA]

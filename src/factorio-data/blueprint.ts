@@ -52,6 +52,7 @@ interface IEntityData extends Omit<BPS.IEntity, 'entity_number'> {
 }
 
 /** Blueprint base class */
+// eslint-disable-next-line import/exports-last
 export default class Blueprint extends EventEmitter {
     name: string
     icons: string[]
@@ -140,12 +141,15 @@ export default class Blueprint extends EventEmitter {
                 if (entity.name === 'deleted') {
                     this.removeEntity(this.entities.get(posToId({ x: entity.x + 2000, y: entity.y + 2000 })), false)
                 } else {
-                    this.createEntity({
-                        name: entity.name,
-                        entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
-                        position: { x: entity.x + 2000, y: entity.y + 2000 },
-                        direction: entity.direction
-                    }, false)
+                    this.createEntity(
+                        {
+                            name: entity.name,
+                            entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
+                            position: { x: entity.x + 2000, y: entity.y + 2000 },
+                            direction: entity.direction
+                        },
+                        false
+                    )
                 }
             })
         })
@@ -160,12 +164,15 @@ export default class Blueprint extends EventEmitter {
                         window.fetchedChunks.push({ xc, yc })
                         chunkData.forEach(entity => {
                             console.log(`Drawing entity ${JSON.stringify(entity)}`)
-                            this.createEntity({
-                                name: entity.name,
-                                entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
-                                position: { x: entity.x + 2000, y: entity.y + 2000 },
-                                direction: entity.direction
-                            }, false)
+                            this.createEntity(
+                                {
+                                    name: entity.name,
+                                    entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
+                                    position: { x: entity.x + 2000, y: entity.y + 2000 },
+                                    direction: entity.direction
+                                },
+                                false
+                            )
                         })
                     })
                 }
@@ -175,8 +182,8 @@ export default class Blueprint extends EventEmitter {
         // get data around the player
         setInterval(() => {
             const playerPositionInBP = {
-                x: (Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) / G.BPC.viewport.getCurrentScale()) / 32,
-                y: (Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale()) / 32
+                x: Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) / G.BPC.viewport.getCurrentScale() / 32,
+                y: Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale() / 32
             }
             // console.log(G.BPC.viewport.getMiddle())
             //console.log(playerPositionInBP)
@@ -189,7 +196,7 @@ export default class Blueprint extends EventEmitter {
     createEntity(rawData: IEntityData, notifyServer: boolean = true) {
         rawData.entity_number = posToId({
             x: rawData.position.x,
-            y: rawData.position.y,
+            y: rawData.position.y
         })
         const rawEntity = new Entity(
             {
@@ -209,13 +216,13 @@ export default class Blueprint extends EventEmitter {
 
     removeEntity(entity: Entity, notifyServer: boolean = true) {
         History.startTransaction(`Deleted entity: ${entity.name}`) // entity.name is no longer there - entity has the properties _events,_eventsCount,m_BP,m_rawEntity
-        console.log("Deleted entity on "+(notifyServer? "client" : "server"))
+        console.log('Deleted entity on ' + (notifyServer ? 'client' : 'server'))
         entity.removeAllConnections()
 
         History.updateMap(this.entities, entity.entityNumber, undefined, undefined, true)
             .type('del')
             .emit((newValue: Entity, oldValue: Entity) => this.onCreateOrRemoveEntity(newValue, oldValue, notifyServer))
-        
+
         History.commitTransaction()
     }
 

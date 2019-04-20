@@ -75,7 +75,7 @@ interface ISpriteData {
     // run_mode?: string
     // apply_runtime_tint?: boolean
     // apply_projection?: boolean
-    // flags?: string[]
+    flags?: string[]
     // counterclockwise?: boolean
     tint?: {
         r: number

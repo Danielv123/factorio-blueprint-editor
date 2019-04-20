@@ -63,7 +63,8 @@ for (const tar in FD.treesAndRocks) {
     if (FD.treesAndRocks.hasOwnProperty(tar) && FD.treesAndRocks[tar].type == 'tree') {
         const entity = FD.treesAndRocks[tar]
         const generator = (data: IDrawData) => {
-            const spriteData = [...generateGraphics(entity)(data)]
+            const spriteData = [...generateTreesAndRocks(entity)(data)]
+            return spriteData
         }
         entityToFunction.set(entity.name, generator)
     }
@@ -605,7 +606,22 @@ function getBeltSprites(
         }
     }
 }
-
+function generateTreesAndRocks(e: FD.TreeOrRock): (data: IDrawData) => FD.SpriteData[] {
+    switch (e.type) {
+        case 'tree':
+            return () => [
+                e.variations[randomIndex()].trunk,
+                e.variations[randomIndex()].leaves,
+                // e.variations[randomIndex()].leaf_generation,
+                // e.variations[randomIndex()].branch_generation,
+                e.variations[randomIndex()].shadow
+            ]
+    }
+    function randomIndex(){
+        return 0
+        // return Math.floor(Math.random()*e.variations.length) // Pick a random variation - spritesheet doesn't contain other variations ATM
+    }
+}
 function generateGraphics(e: FD.Entity): (data: IDrawData) => FD.SpriteData[] {
     if (e.name.search('combinator') !== -1) {
         return (data: IDrawData) => {
@@ -1319,11 +1335,6 @@ function generateGraphics(e: FD.Entity): (data: IDrawData) => FD.SpriteData[] {
     }
 
     switch (e.type) {
-        case 'tree':
-            return () => [
-                ([e.variations[0].trunk] as FD.SpriteLayers).layers[0],
-                ([e.variations[0].leaves] as FD.SpriteLayers).layers[0]
-            ]
         case 'furnace':
         case 'logistic_container':
             return () => [(e.animation as FD.SpriteLayers).layers[0]]

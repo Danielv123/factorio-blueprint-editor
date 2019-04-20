@@ -132,6 +132,9 @@ export class EntitySprite extends PIXI.Sprite {
             PIXI.Texture.addToCache(texture, textureKey)
         }
         super(texture)
+        if (data.flags && data.flags.includes('shadow')) {
+            this.alpha = 0.4
+        }
 
         this.id = EntitySprite.getNextID()
 
