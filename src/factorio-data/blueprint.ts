@@ -150,14 +150,14 @@ export default class Blueprint extends EventEmitter {
             })
         })
 
-        const fetchedChunks = []
+        window.fetchedChunks = []
         // get starting area
         setTimeout(() => {
             for (let xc = -5; xc < 5; xc++) {
                 for (let yc = -5; yc < 5; yc++) {
                     console.log(`Fetching chunk ${JSON.stringify({ x: xc, y: yc })}`)
                     this.socket.emit('getChunk', { x: xc, y: yc }, chunkData => {
-                        fetchedChunks.push({ xc, yc })
+                        window.fetchedChunks.push({ xc, yc })
                         chunkData.forEach(entity => {
                             console.log(`Drawing entity ${JSON.stringify(entity)}`)
                             this.createEntity({
@@ -170,7 +170,7 @@ export default class Blueprint extends EventEmitter {
                     })
                 }
             }
-        }, 4000)
+        }, 10000)
 
         // get data around the player
         setInterval(() => {
@@ -186,7 +186,11 @@ export default class Blueprint extends EventEmitter {
         return this
     }
 
-    createEntity(rawData: IEntityData, notifyServer = true) {
+    createEntity(rawData: IEntityData, notifyServer: boolean = true) {
+        rawData.entity_number = posToId({
+            x: rawData.position.x,
+            y: rawData.position.y,
+        })
         const rawEntity = new Entity(
             {
                 ...rawData,
@@ -203,15 +207,15 @@ export default class Blueprint extends EventEmitter {
         return rawEntity
     }
 
-    removeEntity(entity: Entity, notifyServer = true) {
-        //History.startTransaction(`Deleted entity: ${entity.name}`) // entity.name is no longer there - entity has the properties _events,_eventsCount,m_BP,m_rawEntity
-        console.log("Deleted entity on "+notifyServer? "client" : "server")
+    removeEntity(entity: Entity, notifyServer: boolean = true) {
+        History.startTransaction(`Deleted entity: ${entity.name}`) // entity.name is no longer there - entity has the properties _events,_eventsCount,m_BP,m_rawEntity
+        console.log("Deleted entity on "+(notifyServer? "client" : "server"))
         entity.removeAllConnections()
 
         History.updateMap(this.entities, entity.entityNumber, undefined, undefined, true)
             .type('del')
             .emit((newValue: Entity, oldValue: Entity) => this.onCreateOrRemoveEntity(newValue, oldValue, notifyServer))
-
+        
         History.commitTransaction()
     }
 
@@ -232,18 +236,18 @@ export default class Blueprint extends EventEmitter {
 
     onCreateOrRemoveEntity(newValue: Entity, oldValue: Entity, notifyServer = true) {
         if (newValue === undefined) {
-            this.entityPositionGrid.removeTileData(oldValue)
-            oldValue.destroy()
-            this.emit('destroy')
-
             // remoteMap sync changes to factorio server via master
             if (notifyServer) {
                 this.socket.emit('deleteEntity', {
                     entity: {
-                        position: idToPos(oldValue.entity_number)
+                        position: idToPos(oldValue.entityNumber)
                     }
                 })
             }
+            // delete entity from editor
+            this.entityPositionGrid.removeTileData(oldValue)
+            oldValue.destroy()
+            this.emit('destroy')
         } else {
             this.entityPositionGrid.setTileData(newValue)
             this.emit('create', newValue)
