@@ -11,7 +11,7 @@
     "bugs": "https://github.com/Teoxoy/factorio-blueprint-editor/issues",
     "homepage": "https://github.com/Teoxoy/factorio-blueprint-editor",
     "scripts": {
-        "start": "parcel src/index.html --port 8080",
+        "start": "parcel src/index.html --port 8081",
         "prebuild": "rimraf dist/*",
         "build": "parcel build src/index.html --public-url ./",
         "setupDist": "git worktree add dist gh-pages",
@@ -34,7 +34,8 @@
         "keyboardjs": "^2.5.1",
         "pako": "^1.0.10",
         "pathfinding": "^0.4.18",
-        "pixi.js": "^5.0.0-rc.2"
+        "pixi.js": "^5.0.0-rc.2",
+        "socket.io-client": "^2.2.0"
     },
     "devDependencies": {
         "@types/dat.gui": "^0.7.2",

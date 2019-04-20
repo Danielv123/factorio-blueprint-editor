@@ -179,14 +179,14 @@ export default class Blueprint extends EventEmitter {
                 y: (Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale()) / 32
             }
             // console.log(G.BPC.viewport.getMiddle())
-            console.log(playerPositionInBP)
+            //console.log(playerPositionInBP)
             // G.BPC.viewport.middle
         }, 1000)
 
         return this
     }
 
-    createEntity(rawData: IEntityData) {
+    createEntity(rawData: IEntityData, notifyServer = true) {
         const rawEntity = new Entity(
             {
                 ...rawData,
@@ -204,8 +204,8 @@ export default class Blueprint extends EventEmitter {
     }
 
     removeEntity(entity: Entity, notifyServer = true) {
-        History.startTransaction(`Deleted entity: ${entity.name}`)
-
+        //History.startTransaction(`Deleted entity: ${entity.name}`) // entity.name is no longer there - entity has the properties _events,_eventsCount,m_BP,m_rawEntity
+        console.log("Deleted entity on "+notifyServer? "client" : "server")
         entity.removeAllConnections()
 
         History.updateMap(this.entities, entity.entityNumber, undefined, undefined, true)
