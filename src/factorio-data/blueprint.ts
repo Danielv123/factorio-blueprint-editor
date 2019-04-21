@@ -187,13 +187,13 @@ export default class Blueprint extends EventEmitter {
                             32
                     }
                     // console.log(G.BPC.viewport.getMiddle())
-                    console.log(playerPositionInBP)
+                    //console.log(playerPositionInBP)
                     // Get chunks in a 5x5 area around the player
                     let factorioChunkPosition = {
                         x: Math.floor((playerPositionInBP.x - 2000) / 32),
                         y: Math.floor((playerPositionInBP.y - 2000) / 32)
                     }
-                    console.log(factorioChunkPosition)
+                    //console.log(factorioChunkPosition)
                     for (let xc = 0; xc < 10; xc++) {
                         for (let yc = 0; yc < 10; yc++) {
                             let cachedChunk = window.fetchedChunks.find(
@@ -207,7 +207,7 @@ export default class Blueprint extends EventEmitter {
                         }
                     }
                     // G.BPC.viewport.middle
-                }, 400000)
+                }, 500)
             }, 0)
         }
         return this
@@ -303,8 +303,8 @@ export default class Blueprint extends EventEmitter {
                         position: idToPos(oldValue.entityNumber)
                     }
                 }
-                packet.entity.position.x = packet.entity.position.x - 2000
-                packet.entity.position.y = packet.entity.position.y - 2000
+                packet.entity.position.x -= 2000
+                packet.entity.position.y -= 2000
                 this.socket.emit('deleteEntity', packet)
             }
             // delete entity from editor
@@ -323,8 +323,10 @@ export default class Blueprint extends EventEmitter {
                         name: newValue.name.replace(/_/g, '-') // replace _ with -
                     }
                 }
-                packet.entity.position.x = packet.entity.position.x - 2000
-                packet.entity.position.y = packet.entity.position.y - 2000
+                packet.entity.position = {
+                    x: packet.entity.position.x - 2000,
+                    y: packet.entity.position.y - 2000,
+                }
                 this.socket.emit('createEntity', packet)
             }
         }
