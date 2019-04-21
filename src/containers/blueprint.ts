@@ -320,10 +320,13 @@ export class BlueprintContainer extends PIXI.Container {
         G.bp.entities.forEach(e => this.wiresContainer.add(e.connections))
         G.bp.tiles.forEach(t => new TileContainer(t))
 
-        G.bp.on('create', (entity: Entity) => new EntityContainer(entity))
+        G.bp.on('create', (entity: Entity, sort: boolean = true) => new EntityContainer(entity, sort))
         G.bp.on('create', (entity: Entity) => this.wiresContainer.add(entity.connections))
-        G.bp.on('create', () => this.wiresContainer.updatePassiveWires())
-        G.bp.on('destroy', () => this.wiresContainer.updatePassiveWires())
+
+        // G.bp.on('create', (entity, _sort, dontUpdateWires: boolean = false) => (dontUpdateWires ? false : this.wiresContainer.updatePassiveWires(entity)))
+        // G.bp.on('destroy', (entity: Entity, dontUpdateWires: boolean = false) =>this.wiresContainer.updatePassiveWires(entity))
+        G.bp.on('create', (entity: Entity, _sort: boolean, dontUpdateWires: boolean = false) => this.wiresContainer.updatePassiveWires(entity))
+        G.bp.on('destroy', (entity: Entity, dontUpdateWires: boolean = false) =>this.wiresContainer.updatePassiveWires(entity))
 
         G.bp.on('create_t', (tile: Tile) => new TileContainer(tile))
 

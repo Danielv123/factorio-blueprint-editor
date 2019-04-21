@@ -176,12 +176,12 @@ export class WiresContainer extends PIXI.Container {
         }
     }
 
-    updatePassiveWires() {
+    updatePassiveWires(entity?: Entity) {
         interface IPole extends IPoint {
             entityNumber: number
             name: string
         }
-
+        if(entity && entity.type !== 'electric_pole') return
         const poles: IPole[] = G.bp.entities
             .filter(e => e.type === 'electric_pole')
             .map(e => ({

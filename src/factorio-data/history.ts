@@ -465,7 +465,7 @@ function s_DeleteValue(obj: ITargetInfo, path: string[]) {
 
 /** Private central function to commit a transaction */
 function s_CommitTransaction(transaction: HistoryEntry) {
-    transaction.log()
+    // transaction.log()
     while (s_HistoryEntries.length > s_HistoryIndex) {
         s_HistoryEntries.pop()
     } // Slice would need value re-assignment - hence not used on purpose
