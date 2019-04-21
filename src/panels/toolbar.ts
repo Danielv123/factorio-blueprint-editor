@@ -42,7 +42,7 @@ export class ToolbarContainer extends PIXI.Container {
         this.fpsGUIText.position.set(G.app.screen.width, background.height / 2)
         this.addChild(this.fpsGUIText)
 
-        this.logo = new PIXI.Text('Factorio Blueprint Editor', {
+        this.logo = new PIXI.Text('Factorio web client (clusterio)', {
             fill: G.colors.text.normal,
             fontFamily: G.fontFamily
         })

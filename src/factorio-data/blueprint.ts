@@ -1,6 +1,7 @@
 import FD from 'factorio-data'
 import EventEmitter from 'eventemitter3'
 import * as PIXI from 'pixi.js'
+import io from 'socket.io-client'
 import G from '../common/globals'
 import util from '../common/util'
 import Entity from './entity'
@@ -8,7 +9,6 @@ import { PositionGrid } from './positionGrid'
 import generators from './generators'
 import * as History from './history'
 import Tile from './tile'
-import io from 'socket.io-client'
 
 class OurMap<K, V> extends Map<K, V> {
     constructor(values?: V[], mapFn?: (value: V) => K) {
@@ -139,13 +139,16 @@ export default class Blueprint extends EventEmitter {
         this.socket.on('updateEntity', data => {
             data.entities.forEach(entity => {
                 if (entity.name === 'deleted') {
-                    this.removeEntity(this.entities.get(posToId({ x: entity.x + 2000, y: entity.y + 2000 })), false)
+                    this.removeEntity(
+                        this.entities.get(posToId({ x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 })),
+                        false
+                    )
                 } else {
                     this.createEntity(
                         {
                             name: entity.name,
-                            entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
-                            position: { x: entity.x + 2000, y: entity.y + 2000 },
+                            entity_number: posToId({ x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 }),
+                            position: { x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 },
                             direction: entity.direction
                         },
                         false
@@ -157,43 +160,67 @@ export default class Blueprint extends EventEmitter {
         window.fetchedChunks = []
         // get starting area
         setTimeout(() => {
+            History.startTransaction(`Requesting starting area`)
             for (let xc = -5; xc < 5; xc++) {
                 for (let yc = -5; yc < 5; yc++) {
-                    console.log(`Fetching chunk ${JSON.stringify({ x: xc, y: yc })}`)
-                    this.socket.emit('getChunk', { x: xc, y: yc }, chunkData => {
-                        window.fetchedChunks.push({ xc, yc })
-                        chunkData.forEach(entity => {
-                            console.log(`Drawing entity ${JSON.stringify(entity)}`)
-                            this.createEntity(
-                                {
-                                    name: entity.name,
-                                    entity_number: posToId({ x: entity.x + 2000, y: entity.y + 2000 }),
-                                    position: { x: entity.x + 2000, y: entity.y + 2000 },
-                                    direction: entity.direction
-                                },
-                                false
-                            )
-                        })
-                    })
+                    this.getChunk(xc, yc)
                 }
             }
+            History.commitTransaction()
+            // get data around the player
+            setInterval(() => {
+                const playerPositionInBP = {
+                    x:
+                        Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) /
+                        G.BPC.viewport.getCurrentScale() /
+                        32,
+                    y: Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale() / 32
+                }
+                // console.log(G.BPC.viewport.getMiddle())
+                console.log(playerPositionInBP)
+                // Get chunks in a 5x5 area around the player
+                let factorioChunkPosition = {
+                    x: Math.floor((playerPositionInBP.x - 2000) / 32),
+                    y: Math.floor((playerPositionInBP.y - 2000) / 32)
+                }
+                console.log(factorioChunkPosition)
+                for (let xc = 0; xc < 10; xc++) {
+                    for (let yc = 0; yc < 10; yc++) {
+                        let cachedChunk = window.fetchedChunks.find(
+                            chunk =>
+                                chunk.xc === xc + factorioChunkPosition.x && chunk.yc === yc + factorioChunkPosition.y
+                        )
+                        if (!cachedChunk) {
+                            this.getChunk(xc + factorioChunkPosition.x, yc + factorioChunkPosition.y)
+                        }
+                    }
+                }
+                // G.BPC.viewport.middle
+            }, 4000)
         }, 10000)
-
-        // get data around the player
-        setInterval(() => {
-            const playerPositionInBP = {
-                x: Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) / G.BPC.viewport.getCurrentScale() / 32,
-                y: Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale() / 32
-            }
-            // console.log(G.BPC.viewport.getMiddle())
-            //console.log(playerPositionInBP)
-            // G.BPC.viewport.middle
-        }, 1000)
 
         return this
     }
-
+    getChunk(xc, yc) {
+        console.log(`Fetching chunk ${JSON.stringify({ x: xc, y: yc })}`)
+        this.socket.emit('getChunk', { x: xc, y: yc }, chunkData => {
+            window.fetchedChunks.push({ xc, yc })
+            chunkData.forEach(entity => {
+                // console.log(`Drawing entity ${JSON.stringify(entity)}`)
+                this.createEntity(
+                    {
+                        name: entity.name,
+                        entity_number: posToId({ x: Number(entity.x + 2000), y: Number(entity.y) + 2000 }),
+                        position: { x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 },
+                        direction: entity.direction
+                    },
+                    false
+                )
+            })
+        })
+    }
     createEntity(rawData: IEntityData, notifyServer: boolean = true) {
+        if (['coal', 'stone', 'rock_huge', 'rock_big', 'iron_ore', 'copper_ore'].includes(rawData.name)) {return false}
         rawData.entity_number = posToId({
             x: rawData.position.x,
             y: rawData.position.y
@@ -216,7 +243,7 @@ export default class Blueprint extends EventEmitter {
 
     removeEntity(entity: Entity, notifyServer: boolean = true) {
         History.startTransaction(`Deleted entity: ${entity.name}`) // entity.name is no longer there - entity has the properties _events,_eventsCount,m_BP,m_rawEntity
-        console.log('Deleted entity on ' + (notifyServer ? 'client' : 'server'))
+        console.log(`Deleted entity on ${  notifyServer ? 'client' : 'server'}`)
         entity.removeAllConnections()
 
         History.updateMap(this.entities, entity.entityNumber, undefined, undefined, true)
@@ -607,7 +634,7 @@ export default class Blueprint extends EventEmitter {
     }
 }
 function posToId(pos: IPoint): number {
-    return Number('1' + (Math.floor(pos.x) + '').padStart(7, '0') + (Math.floor(pos.y) + '').padStart(7, '0'))
+    return Number(`1${  (Math.floor(pos.x) + '').padStart(7, '0')  }${(Math.floor(pos.y) + '').padStart(7, '0')}`)
 }
 function idToPos(ID: number): IPoint {
     const a = String(ID).substr(1)

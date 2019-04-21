@@ -27,7 +27,11 @@ interface IDrawData {
 }
 
 function getSpriteData(data: IDrawData): ISpriteData[] {
+    try {
     return entityToFunction.get(data.name)(data)
+    } catch(e) {
+        console.error(new Error(`Something went from in spriteDataBuilder.js Data.name: ${data.name}`))
+    }
 }
 
 const entityToFunction = new Map()
