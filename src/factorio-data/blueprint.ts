@@ -164,72 +164,95 @@ export default class Blueprint extends EventEmitter {
         // get starting area
         // window.startLoading() is called in app.ts after everything has initialized and the editor is done loading
         window.startLoading = () => {
-            setTimeout(() => {
-                console.time('Started initial load')
-                History.startTransaction(`Requesting starting area`)
-                for (let xc = -5; xc < 5; xc++) {
-                    for (let yc = -5; yc < 5; yc++) {
-                        this.getChunk(xc, yc)
+            // get data around the player
+            setInterval(() => {
+                const playerPositionInBP = {
+                    x:
+                        Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) /
+                        G.BPC.viewport.getCurrentScale() /
+                        32,
+                    y: Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) / G.BPC.viewport.getCurrentScale() / 32
+                }
+                // console.log(G.BPC.viewport.getMiddle())
+                // console.log(playerPositionInBP)
+                // Get chunks in a 5x5 area around the player
+                let factorioChunkPosition = {
+                    x: Math.floor((playerPositionInBP.x - 2000) / 32),
+                    y: Math.floor((playerPositionInBP.y - 2000) / 32)
+                }
+                // console.log(factorioChunkPosition)
+                for (let xc = 0; xc < 10; xc++) {
+                    for (let yc = 0; yc < 10; yc++) {
+                        this.getChunk(xc + factorioChunkPosition.x, yc + factorioChunkPosition.y)
                     }
                 }
-                History.commitTransaction()
-                console.timeEnd('Started initial load')
-                // get data around the player
-                setInterval(() => {
-                    const playerPositionInBP = {
-                        x:
-                            Math.abs(G.BPC.position.x + G.BPC.viewport.getMiddle().x) /
-                            G.BPC.viewport.getCurrentScale() /
-                            32,
-                        y:
-                            Math.abs(G.BPC.position.y + G.BPC.viewport.getMiddle().y) /
-                            G.BPC.viewport.getCurrentScale() /
-                            32
+                // Unload chunks outside of 10x10 area
+                window.fetchedChunks.forEach(cachedChunk => {
+                    if (
+                        cachedChunk.entities.length &&
+                        (cachedChunk.xc < -2 + factorioChunkPosition.x ||
+                            cachedChunk.xc > 12 + factorioChunkPosition.x ||
+                            cachedChunk.yc < -2 + factorioChunkPosition.y ||
+                            cachedChunk.yc > 12 + factorioChunkPosition.y)
+                    ) {
+                        // Outside of bounds, unload
+                        console.log(`Unloading chunk x:${cachedChunk.xc} y:${cachedChunk.yc}`)
+                        cachedChunk.entities.forEach(entity => {
+                            // try {
+                                this.removeEntity(entity, false)
+                            // } catch (e) {
+                                //console.error(e)
+                                //console.error(entity)
+                            // }
+                        })
+                        cachedChunk.entities = []
                     }
-                    // console.log(G.BPC.viewport.getMiddle())
-                    //console.log(playerPositionInBP)
-                    // Get chunks in a 5x5 area around the player
-                    let factorioChunkPosition = {
-                        x: Math.floor((playerPositionInBP.x - 2000) / 32),
-                        y: Math.floor((playerPositionInBP.y - 2000) / 32)
-                    }
-                    //console.log(factorioChunkPosition)
-                    for (let xc = 0; xc < 10; xc++) {
-                        for (let yc = 0; yc < 10; yc++) {
-                            let cachedChunk = window.fetchedChunks.find(
-                                chunk =>
-                                    chunk.xc === xc + factorioChunkPosition.x &&
-                                    chunk.yc === yc + factorioChunkPosition.y
-                            )
-                            if (!cachedChunk) {
-                                this.getChunk(xc + factorioChunkPosition.x, yc + factorioChunkPosition.y)
-                            }
-                        }
-                    }
-                    // G.BPC.viewport.middle
-                }, 500)
-            }, 0)
+                })
+                // G.BPC.viewport.middle
+            }, 3000)
         }
         return this
     }
     getChunk(xc, yc) {
-        console.log(`Fetching chunk ${JSON.stringify({ x: xc, y: yc })}`)
-        this.socket.emit('getChunk', { x: xc, y: yc }, chunkData => {
-            window.fetchedChunks.push({ xc, yc })
-            chunkData.forEach((entity, i) => {
-                // console.log(`Drawing entity ${JSON.stringify(entity)}`)
-                this.createEntity(
-                    {
-                        name: entity.name,
-                        entity_number: posToId({ x: Number(entity.x + 2000), y: Number(entity.y) + 2000 }),
-                        position: { x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 },
-                        direction: entity.direction
-                    },
-                    false,
-                    chunkData.length === i - 1 // Should we resort entities after Z index? Expensive call
+        let cachedChunk = window.fetchedChunks.find(chunk => chunk.xc === xc && chunk.yc === yc)
+        if (cachedChunk && cachedChunk.entities < cachedChunk.chunkData) {
+            console.log(`Loading cached chunk ${JSON.stringify({ x: xc, y: yc })}`)
+            cachedChunk.chunkData.forEach((entity, i) => {
+                cachedChunk.entities.push(
+                    this.createEntity(
+                        {
+                            name: entity.name,
+                            entity_number: posToId({ x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 }),
+                            position: { x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 },
+                            direction: entity.direction
+                        },
+                        false,
+                        cachedChunk.chunkData.length === i - 1 // Should we resort entities after Z index? Expensive call
+                    )
                 )
+            } 
+        } else if(cachedChunk){} else {
+            console.log(`Loading chunk ${JSON.stringify({ x: xc, y: yc })}`)
+            this.socket.emit('getChunk', { x: xc, y: yc }, chunkData => {
+                let cachedChunk = { xc, yc, chunkData, entities: [] }
+                window.fetchedChunks.push(cachedChunk)
+                chunkData.forEach((entity, i) => {
+                    // console.log(`Drawing entity ${JSON.stringify(entity)}`)
+                    cachedChunk.entities.push(
+                        this.createEntity(
+                            {
+                                name: entity.name,
+                                entity_number: posToId({ x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 }),
+                                position: { x: Number(entity.x) + 2000, y: Number(entity.y) + 2000 },
+                                direction: entity.direction
+                            },
+                            false,
+                            chunkData.length === i - 1 // Should we resort entities after Z index? Expensive call
+                        )
+                    )
+                })
             })
-        })
+        }
     }
     createEntity(rawData: IEntityData, notifyServer: boolean = true, sort: boolean = true) {
         if (
@@ -260,15 +283,16 @@ export default class Blueprint extends EventEmitter {
     }
 
     removeEntity(entity: Entity, notifyServer: boolean = true) {
-        History.startTransaction(`Deleted entity: ${entity.name}`) // entity.name is no longer there - entity has the properties _events,_eventsCount,m_BP,m_rawEntity
-        console.log(`Deleted entity on ${notifyServer ? 'client' : 'server'}`)
+        History.startTransaction(`Deleted entity: ${entity.name}`)
+        console.log(`Deleted entity, notify server? ${notifyServer ? 'yes' : 'no'}`)
         entity.removeAllConnections()
 
         History.updateMap(this.entities, entity.entityNumber, undefined, undefined, true)
             .type('del')
-            .emit((newValue: Entity, oldValue: Entity) =>
+            .emit((newValue: Entity, oldValue: Entity) =>{
+                if(newValue === undefined && oldValue === undefined) throw new Error("OldValue is undefined????")
                 this.onCreateOrRemoveEntity(newValue, oldValue, notifyServer, undefined, false)
-            )
+            })
 
         History.commitTransaction()
     }
@@ -325,7 +349,7 @@ export default class Blueprint extends EventEmitter {
                 }
                 packet.entity.position = {
                     x: packet.entity.position.x - 2000,
-                    y: packet.entity.position.y - 2000,
+                    y: packet.entity.position.y - 2000
                 }
                 this.socket.emit('createEntity', packet)
             }
@@ -668,11 +692,15 @@ export default class Blueprint extends EventEmitter {
     }
 }
 function posToId(pos: IPoint): number {
-    return Number(`1${(Math.floor(pos.x) + '').padStart(7, '0')}${(Math.floor(pos.y) + '').padStart(7, '0')}`)
+    return Number(
+        `1${(Math.floor(pos.x) + '').padStart(7, '0')}${(Math.floor(pos.y) + '').padStart(7, '0')}000${Math.floor(
+            Math.random() * 999999
+        )}`
+    )
 }
 function idToPos(ID: number): IPoint {
     const a = String(ID).substr(1)
     const y = Number(a.substr(7))
-    const x = Number(a.slice(0, -7))
+    const x = Number(a.substr(0, 7))
     return { x, y }
 }
